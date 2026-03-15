@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "properties": {
+    "WEBHOOK_URL": {
+      "type": "string",
+      "title": "Webhook URL",
+      "description": "Full URL to POST to (e.g. Slack incoming webhook, Discord webhook, or any HTTP endpoint). Set in skill config so the agent can send notifications without seeing the URL."
+    }
+  },
+  "required": ["WEBHOOK_URL"]
+}

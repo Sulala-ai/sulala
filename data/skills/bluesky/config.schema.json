@@ -1,0 +1,17 @@
+{
+  "type": "object",
+  "properties": {
+    "BLUESKY_HANDLE": {
+      "type": "string",
+      "title": "Bluesky handle",
+      "description": "Your Bluesky handle (e.g. yourname.bsky.social). Used with the app password to create a session."
+    },
+    "BLUESKY_APP_PASSWORD": {
+      "type": "string",
+      "format": "password",
+      "title": "Bluesky app password",
+      "description": "App password from Bluesky Settings → App passwords. Do not use your main account password."
+    }
+  },
+  "required": ["BLUESKY_HANDLE", "BLUESKY_APP_PASSWORD"]
+}

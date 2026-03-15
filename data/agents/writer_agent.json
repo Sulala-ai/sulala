@@ -1,0 +1,10 @@
+{
+  "id": "writer_agent",
+  "name": "Writer Assistant",
+  "description": "Draft and send email (Gmail) and translate text. Use when the user wants to send an email or translate content. Gmail requires connection via Portal or skill config.",
+  "model": "gpt-4o-mini",
+  "skills": ["memory", "gmail", "translate"],
+  "limits": {
+    "max_turns": 15
+  }
+}

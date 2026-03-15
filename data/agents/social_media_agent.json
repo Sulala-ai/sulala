@@ -1,0 +1,10 @@
+{
+  "id": "social_media_agent",
+  "name": "Social Media Assistant",
+  "description": "Post to social networks (e.g. Bluesky), read your timeline, and reply to posts. Configure credentials in the skill (Agents → Edit → Skills, or Settings). Currently supports Bluesky.",
+  "model": "gpt-4o-mini",
+  "skills": ["memory", "bluesky"],
+  "limits": {
+    "max_turns": 15
+  }
+}

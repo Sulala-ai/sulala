@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "properties": {
+    "SERPER_API_KEY": {
+      "type": "string",
+      "format": "password",
+      "title": "Serper API key",
+      "description": "API key from serper.dev. Free tier: 2500 searches/month. Set in skill config."
+    }
+  },
+  "required": ["SERPER_API_KEY"]
+}

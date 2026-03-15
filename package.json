@@ -1,0 +1,48 @@
+{
+  "name": "@sulala/agent-os",
+  "version": "0.1.4",
+  "publishConfig": {
+    "access": "public"
+  },
+  "description": "Lightweight Bun-based Agent Operating System — micro-agents, skills, workflows",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "sulala": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "bun build src/cli.ts --outdir=dist --target=bun && bun build src/index.ts --outdir=dist --target=bun",
+    "build:dashboard": "cd dashboard && VITE_AGENT_OS_API= npm run build",
+    "dev": "AGENT_OS_AGENTS_DIR=./data/agents bun run --watch src/index.ts",
+    "start": "bun run src/index.ts",
+    "run": "bun run src/cli.ts run",
+    "cli": "bun run src/cli.ts",
+    "sulala": "bun run src/cli.ts",
+    "setup": "mkdir -p ~/.agent-os/agents && cp examples/echo-agent.json ~/.agent-os/agents/",
+    "prepublishOnly": "bun run build && (cd dashboard && npm install && VITE_AGENT_OS_API= npm run build)"
+  },
+  "files": [
+    "dist",
+    "dashboard/dist"
+  ],
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "automation",
+    "bun",
+    "local"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "dependencies": {
+    "@sulala/agent-os": "^0.1.0",
+    "node-cron": "^4.2.1",
+    "tweetnacl": "^1.0.3",
+    "yaml": "^2.8.2"
+  }
+}

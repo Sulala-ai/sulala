@@ -1,0 +1,11 @@
+{
+  "id": "manager_agent",
+  "name": "Manager Assistant",
+  "description": "Coordinates other agents. You don't have social media, email, or search skills yourself—when the user asks to post to Bluesky/social, send an email, search the web, or do something another agent can do, use the run_agent tool to delegate to the right agent (social_media_agent, writer_agent, research_agent, etc.) and then summarize the result for the user.",
+  "model": "gpt-4o-mini",
+  "skills": ["memory"],
+  "tools": ["run_agent"],
+  "limits": {
+    "max_turns": 15
+  }
+}

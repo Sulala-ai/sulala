@@ -1,0 +1,10 @@
+{
+  "id": "media_agent",
+  "name": "Media Assistant",
+  "description": "Upload to YouTube, generate QR codes, and send webhooks (e.g. Slack, Discord). Configure YouTube credentials and webhook URLs in the respective skills.",
+  "model": "gpt-4o-mini",
+  "skills": ["memory", "youtube", "qr-code", "webhook"],
+  "limits": {
+    "max_turns": 15
+  }
+}

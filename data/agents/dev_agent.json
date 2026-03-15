@@ -1,0 +1,10 @@
+{
+  "id": "dev_agent",
+  "name": "Dev Assistant",
+  "description": "Git status, search the codebase, parse JSON (jq), and fetch APIs. Use when the user asks about git, finding code, or working with JSON/APIs. Operates in the agent workspace.",
+  "model": "gpt-4o-mini",
+  "skills": ["memory", "git", "file-search", "jq", "fetch"],
+  "limits": {
+    "max_turns": 15
+  }
+}

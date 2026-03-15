@@ -1,0 +1,12 @@
+{
+  "id": "briefing_agent",
+  "name": "Daily Briefing",
+  "description": "Morning-style brief: weather and RSS feeds. Use for 'what's the weather' and 'what's new' from configured feeds. Optionally schedule (e.g. 8:00) for a daily brief.",
+  "model": "gpt-4o-mini",
+  "skills": ["memory", "weather", "rss"],
+  "limits": {
+    "max_turns": 15
+  },
+  "schedule": "0 8 * * *",
+  "schedule_input": "Give me a short morning brief: weather for my location and top items from my RSS feeds."
+}

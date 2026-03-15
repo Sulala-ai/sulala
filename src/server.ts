@@ -60,7 +60,14 @@ import { join, dirname, resolve } from "node:path";
 import { mkdirSync, existsSync } from "node:fs";
 
 const PORT = parseInt(process.env.PORT ?? "3010", 10);
-const DASHBOARD_DIST = resolve(join(import.meta.dir, "..", "dashboard", "dist"));
+// Prefer dashboard-dist (used in published package); fallback to dashboard/dist (local dev)
+const DASHBOARD_DIST = (() => {
+  const root = join(import.meta.dir, "..");
+  const a = resolve(join(root, "dashboard-dist"));
+  const b = resolve(join(root, "dashboard", "dist"));
+  if (existsSync(a) && existsSync(join(a, "index.html"))) return a;
+  return b;
+})();
 const HOST = process.env.HOST ?? "127.0.0.1";
 const EVENT_TYPES: EventType[] = [
   "task.created",
@@ -150,7 +157,16 @@ function createRoutes(): Record<string, unknown> {
       Response.json({ ok: true, service: "agent-os" }, { headers: CORS_HEADERS as HeadersInit }),
     "/api/agents": {
       GET: async () => {
-        const agents = await loadAgents();
+        let agents: AgentConfig[];
+        try {
+          agents = await loadAgents();
+        } catch (err) {
+          console.error("[sulala] GET /api/agents failed:", err);
+          return jsonResponse({
+            agents: [],
+            error: "Agent store unavailable. Try running 'sulala onboard' again.",
+          }, 200);
+        }
         return jsonResponse({
           agents: agents.map((a) => ({
             id: a.id,
@@ -515,6 +531,13 @@ export async function startServer(): Promise<void> {
   await loadPlugins();
   await seedAgentsIfEmpty();
 
+  const dashboardMissing = !existsSync(DASHBOARD_DIST) || !existsSync(join(DASHBOARD_DIST, "index.html"));
+  if (dashboardMissing) {
+    console.warn(
+      `[sulala] Dashboard not found at ${DASHBOARD_DIST}. From package root run: cd dashboard && npm run build. If using a global install, reinstall: bun install -g @sulala/agent-os@latest`
+    );
+  }
+
   const server = Bun.serve({
     port: PORT,
     hostname: HOST,
@@ -534,7 +557,9 @@ export async function startServer(): Promise<void> {
           return Response.json(
             {
               error: "Dashboard not built",
+              path: DASHBOARD_DIST,
               hint: "From the sulala package root run: cd dashboard && npm run build",
+              hint_global: "If you installed globally, reinstall to get the dashboard: bun install -g @sulala/agent-os@latest",
             },
             { status: 404, headers: CORS_HEADERS as HeadersInit }
           );

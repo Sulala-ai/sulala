@@ -1,6 +1,6 @@
 {
   "name": "@sulala/agent-os",
-  "version": "0.1.4",
+  "version": "0.1.13",
   "publishConfig": {
     "access": "public"
   },
@@ -19,11 +19,12 @@
     "cli": "bun run src/cli.ts",
     "sulala": "bun run src/cli.ts",
     "setup": "mkdir -p ~/.agent-os/agents && cp examples/echo-agent.json ~/.agent-os/agents/",
-    "prepublishOnly": "bun run build && (cd dashboard && npm install && VITE_AGENT_OS_API= npm run build)"
+    "prepublishOnly": "bun run build && (cd dashboard && npm install && VITE_AGENT_OS_API= npm run build) && node -e \"require('fs').cpSync('dashboard/dist','dashboard-dist',{recursive:true})\""
   },
   "files": [
     "dist",
-    "dashboard/dist"
+    "dashboard-dist",
+    "data"
   ],
   "engines": {
     "bun": ">=1.0.0"

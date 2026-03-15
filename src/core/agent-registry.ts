@@ -4,6 +4,7 @@
  */
 
 import { readdir, readFile, writeFile, mkdir, unlink } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { MemoryStore } from "../db/memory-store.js";
 import type { AgentConfig } from "../types/agent.js";
@@ -31,7 +32,13 @@ export function getAgentsDir(): string {
 }
 
 function getSeedAgentsDir(): string {
-  return process.env.AGENT_OS_SEED_AGENTS_DIR ?? join(process.cwd(), "data", "agents");
+  if (process.env.AGENT_OS_SEED_AGENTS_DIR) return process.env.AGENT_OS_SEED_AGENTS_DIR;
+  // Resolve relative to package root (works when running from dist/cli.js or from src/core/)
+  const fromDist = join(import.meta.dir, "..", "data", "agents");
+  const fromSrc = join(import.meta.dir, "..", "..", "data", "agents");
+  if (existsSync(fromDist)) return fromDist;
+  if (existsSync(fromSrc)) return fromSrc;
+  return join(process.cwd(), "data", "agents");
 }
 
 async function insertSeedAgentFromFile(

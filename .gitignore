@@ -6,6 +6,7 @@ note.txt
 # Build output
 dist/
 dashboard/dist/
+dashboard-dist/
 node_modules/
 dashboard/node_modules/
 

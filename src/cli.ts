@@ -210,8 +210,8 @@ async function cmdOnboard(): Promise<void> {
   setAgentStore(memoryStore);
   await seedAgentsIfEmpty();
   const { installed: agentsInstalled } = await installSystemAgents();
-  const { installed: skillsInstalled } = await installSystemSkills();
-  console.log("Onboard complete. Agents:", agentsInstalled, "Skills:", skillsInstalled);
+  // Skills are not auto-installed; user installs default skills from the dashboard onboarding.
+  console.log("Onboard complete. Agents:", agentsInstalled, "— Install default skills from the dashboard.");
 
   const started = await startServerDaemonIfNeeded();
   if (started) {

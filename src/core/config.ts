@@ -4,6 +4,7 @@
  */
 
 import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { join, resolve, relative } from "node:path";
 
 const DEFAULT_HOME = join(
@@ -219,7 +220,13 @@ export function getSkillsDir(): string {
 
 /** Seed directory for system default skills (e.g. data/skills). Used by "Install default skills". */
 export function getSeedSkillsDir(): string {
-  return process.env.AGENT_OS_SEED_SKILLS_DIR ?? join(process.cwd(), "data", "skills");
+  if (process.env.AGENT_OS_SEED_SKILLS_DIR) return process.env.AGENT_OS_SEED_SKILLS_DIR;
+  // Resolve relative to package root (works when running from dist/cli.js or from src/core/)
+  const fromDist = join(import.meta.dir, "..", "data", "skills");
+  const fromSrc = join(import.meta.dir, "..", "..", "data", "skills");
+  if (existsSync(fromDist)) return fromDist;
+  if (existsSync(fromSrc)) return fromSrc;
+  return join(process.cwd(), "data", "skills");
 }
 
 /** Per-agent workspace root: ~/.agent-os/workspaces/{agent_id}/. File-access tools should restrict to this. */

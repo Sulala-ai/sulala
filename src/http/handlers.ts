@@ -12,7 +12,18 @@ import {
 } from "../core/tasks.js";
 import { getRecentEvents } from "../core/events.js";
 import { loadGraph, runGraph, runGraphStream, type GraphStreamEvent } from "../core/graphs.js";
-import { readConfig, writeConfig, readSkillConfig, writeSkillConfig, ensureWorkspace, getWorkspaceDir, resolveInWorkspace } from "../core/config.js";
+import {
+  readConfig,
+  writeConfig,
+  readSkillConfig,
+  writeSkillConfig,
+  ensureWorkspace,
+  getWorkspaceDir,
+  resolveInWorkspace,
+  readMcpConfig,
+  writeMcpConfig,
+  type McpServerConfig,
+} from "../core/config.js";
 import {
   installSkillFromPath,
   installSkillFromUrl,
@@ -21,6 +32,22 @@ import {
   listSkills,
 } from "../skills/loader.js";
 import { callLLM } from "../core/llm.js";
+import { testMcpServer } from "../mcp/registry.js";
+
+function isPlainObject(x: unknown): x is Record<string, unknown> {
+  return Boolean(x) && typeof x === "object" && !Array.isArray(x);
+}
+
+function safeMcpId(id: string): string {
+  return id.replace(/[^a-z0-9_-]/gi, "_").trim();
+}
+
+function maskEnvKeys(env?: Record<string, string>): Record<string, boolean> | undefined {
+  if (!env) return undefined;
+  const out: Record<string, boolean> = {};
+  for (const [k, v] of Object.entries(env)) out[k] = Boolean(String(v ?? "").trim());
+  return out;
+}
 
 export async function handleRun(req: Request, memoryStore: MemoryStore): Promise<Response> {
   const parsed = await parseJsonBody<{ agent_id: string; task: string; conversation_id?: string }>(req);
@@ -427,6 +454,100 @@ export async function handleSettings(req: Request): Promise<Response> {
     return jsonResponse({ ok: true });
   }
   return jsonResponse({ error: "Method not allowed" }, 405);
+}
+
+export async function handleMcpServers(req: Request): Promise<Response> {
+  if (req.method === "GET") {
+    const servers = await readMcpConfig();
+    // Never return raw env values; only whether each key is configured.
+    return jsonResponse({
+      servers: servers.map((s) => ({
+        id: s.id,
+        name: s.name ?? null,
+        enabled: s.enabled !== false,
+        transport: "stdio",
+        command: s.command,
+        args: s.args ?? [],
+        env_configured: maskEnvKeys(s.env) ?? {},
+      })),
+    });
+  }
+
+  if (req.method === "PUT") {
+    const parsed = await parseJsonBody<{
+      servers: Array<{
+        id: string;
+        name?: string | null;
+        enabled?: boolean;
+        transport?: "stdio";
+        command: string;
+        args?: string[];
+        env?: Record<string, string>;
+      }>;
+    }>(req);
+    if (!parsed.ok) return parsed.response;
+    const list = Array.isArray(parsed.body.servers) ? parsed.body.servers : [];
+    const out: McpServerConfig[] = [];
+    for (const s of list) {
+      const id = safeMcpId(String(s.id ?? ""));
+      const command = typeof s.command === "string" ? s.command.trim() : "";
+      if (!id || !command) continue;
+      out.push({
+        id,
+        name: typeof s.name === "string" ? s.name.trim() || undefined : undefined,
+        enabled: s.enabled === false ? false : true,
+        transport: "stdio",
+        command,
+        args: Array.isArray(s.args) ? s.args.filter((a): a is string => typeof a === "string") : undefined,
+        env: isPlainObject(s.env)
+          ? (Object.fromEntries(Object.entries(s.env).filter(([, v]) => typeof v === "string")) as Record<string, string>)
+          : undefined,
+      });
+    }
+    await writeMcpConfig(out);
+    return jsonResponse({ ok: true });
+  }
+
+  return jsonResponse({ error: "Method not allowed" }, 405);
+}
+
+export async function handleMcpServerDelete(id: string): Promise<Response> {
+  const safeId = safeMcpId(id);
+  if (!safeId) return jsonResponse({ error: "Invalid id" }, 400);
+  const servers = await readMcpConfig();
+  const next = servers.filter((s) => s.id !== safeId);
+  await writeMcpConfig(next);
+  return jsonResponse({ ok: true });
+}
+
+export async function handleMcpServerTest(req: Request): Promise<Response> {
+  const parsed = await parseJsonBody<{
+    id: string;
+    name?: string | null;
+    enabled?: boolean;
+    transport?: "stdio";
+    command: string;
+    args?: string[];
+    env?: Record<string, string>;
+  }>(req);
+  if (!parsed.ok) return parsed.response;
+  const b = parsed.body;
+  const id = safeMcpId(String(b.id ?? ""));
+  const command = typeof b.command === "string" ? b.command.trim() : "";
+  if (!id || !command) return jsonResponse({ error: "Missing required fields: id, command" }, 400);
+  const result = await testMcpServer({
+    id,
+    name: typeof b.name === "string" ? b.name.trim() || undefined : undefined,
+    enabled: b.enabled === false ? false : true,
+    transport: "stdio",
+    command,
+    args: Array.isArray(b.args) ? b.args.filter((a): a is string => typeof a === "string") : undefined,
+    env: isPlainObject(b.env)
+      ? (Object.fromEntries(Object.entries(b.env).filter(([, v]) => typeof v === "string")) as Record<string, string>)
+      : undefined,
+  });
+  if (result.error) return jsonResponse({ ok: false, error: result.error, tools: result.tools }, 200);
+  return jsonResponse({ ok: true, tools: result.tools }, 200);
 }
 
 export async function handleGraphRun(req: Request): Promise<Response> {

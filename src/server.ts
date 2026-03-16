@@ -34,6 +34,9 @@ import {
   handleSkillUpload,
   handleSkillMdUpload,
   handleSettings,
+  handleMcpServers,
+  handleMcpServerDelete,
+  handleMcpServerTest,
   handleGraphRun,
   handleGraphRunStream,
   handleAgentSuggest,
@@ -505,6 +508,19 @@ function createRoutes(): Record<string, unknown> {
           token,
           message: "Restart the server for the new token to take effect.",
         });
+      },
+    },
+    "/api/mcp/servers": {
+      GET: (req: Request) => handleMcpServers(req),
+      PUT: (req: Request) => handleMcpServers(req),
+    },
+    "/api/mcp/servers/test": {
+      POST: (req: Request) => handleMcpServerTest(req),
+    },
+    "/api/mcp/servers/:id": {
+      DELETE: async (req: BunRequest<"/api/mcp/servers/:id">) => {
+        const id = decodeURIComponent(req.params.id);
+        return handleMcpServerDelete(id);
       },
     },
     "/api/channels/telegram/webhook": {

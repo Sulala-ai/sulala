@@ -89,6 +89,51 @@ export function getToolsForAgent(agent: AgentConfig): Tool[] {
   return all;
 }
 
+/**
+ * Normalize internal ToolInputSchema to an OpenAI-compatible JSON Schema.
+ *
+ * Some upstream tool definitions (e.g. MCP servers) may declare array-typed
+ * properties without an `items` schema. OpenAI's tools API rejects such
+ * schemas with errors like:
+ *   "array schema missing items"
+ *
+ * To keep things robust, we conservatively add a default `items` schema for
+ * any array-typed properties that don't specify one, assuming an array of
+ * strings. This is generic but valid, and prevents hard 400 errors from the
+ * LLM API.
+ */
+function normalizeSchemaForOpenAI(schema: ToolInputSchema): ToolInputSchema & {
+  properties?: Record<string, { type: string; description?: string; items?: { type: string } }>;
+} {
+  const base: ToolInputSchema & {
+    properties?: Record<string, { type: string; description?: string; items?: { type: string } }>;
+  } = {
+    type: "object",
+    ...(schema.required ? { required: [...schema.required] } : {}),
+  };
+
+  if (schema.properties) {
+    const props: Record<string, { type: string; description?: string; items?: { type: string } }> = {};
+    for (const [key, value] of Object.entries(schema.properties)) {
+      if (!value) continue;
+      const { type, description } = value;
+      // If a property is declared as an array but lacks items, default to array of strings
+      if (type === "array") {
+        props[key] = {
+          type: "array",
+          ...(description ? { description } : {}),
+          items: { type: "string" },
+        };
+      } else {
+        props[key] = { type, ...(description ? { description } : {}) };
+      }
+    }
+    base.properties = props;
+  }
+
+  return base;
+}
+
 /** Convert tool to OpenAI function-calling format. */
 export function toolToOpenAIFormat(tool: Tool): {
   type: "function";
@@ -99,7 +144,9 @@ export function toolToOpenAIFormat(tool: Tool): {
     function: {
       name: tool.id,
       description: tool.description,
-      parameters: tool.input_schema,
+      // OpenAI is strict about JSON Schema; normalize to avoid invalid
+      // schemas (e.g. arrays without items) coming from external tools.
+      parameters: normalizeSchemaForOpenAI(tool.input_schema),
     },
   };
 }

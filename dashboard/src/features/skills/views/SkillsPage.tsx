@@ -30,6 +30,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { X, MoreHorizontal, Settings, Trash2, Eye, EyeOff, Download, Store, ChevronLeft, ChevronRight, Search } from "lucide-react"
 import { toast } from "sonner"
 import { MarkdownContent } from "@/components/markdown-content"
+import { McpServersForm } from "@/features/settings/components/McpServersForm"
 
 /** Per-skill config form state: skillId -> env key -> value (empty = "already set" or not filled) */
 type ConfigFormState = Record<string, Record<string, string>>
@@ -426,9 +427,10 @@ export function SkillsPage() {
       </div>
 
       <Tabs value={skillsTab} onValueChange={setSkillsTab} className="w-full">
-        <TabsList className="grid w-full max-w-[320px] grid-cols-2">
+        <TabsList className="grid w-full max-w-[420px] grid-cols-3">
           <TabsTrigger value="installed">Installed skills</TabsTrigger>
           <TabsTrigger value="discover">Discover</TabsTrigger>
+          <TabsTrigger value="mcp">MCP Servers</TabsTrigger>
         </TabsList>
         <TabsContent value="installed" className="mt-4">
           <Card>
@@ -681,6 +683,9 @@ export function SkillsPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+        <TabsContent value="mcp" className="mt-4">
+          <McpServersForm />
         </TabsContent>
       </Tabs>
 

@@ -10,6 +10,8 @@ import { callLLM, callLLMStream } from "./llm.js";
 import { getToolsForAgent, toolToOpenAIFormat, getTool } from "./tool-registry.js";
 import "../tools/index.js"; // Register built-in tools
 import { loadSkillsForAgent, getSkillDocContext } from "../skills/loader.js";
+import { readMcpConfig } from "./config.js";
+import { loadMcpServers } from "../mcp/registry.js";
 import { publishWithBuffer } from "./events.js";
 import { ensureWorkspace, getWorkspaceDir } from "./config.js";
 import { loadAgents } from "./agent-registry.js";
@@ -75,6 +77,13 @@ function runAgentInner(options: RunOptions): Promise<RunResult> {
 
   // Load any skills declared on this agent (registers their tools).
   await loadSkillsForAgent(agent);
+  // Load MCP tools (optional). MCP tools are registered with "mcp_<server>_<tool>" ids.
+  try {
+    const mcpServers = await readMcpConfig();
+    await loadMcpServers(mcpServers);
+  } catch (err) {
+    console.warn("[mcp] Failed to load MCP servers:", errorMessage(err));
+  }
 
   publishWithBuffer("agent.started", {
     agent_id: agent.id,
@@ -349,6 +358,12 @@ export async function runAgentStream(options: RunOptions, onEvent: (ev: AgentStr
 
   await ensureWorkspace(agent.id);
   await loadSkillsForAgent(agent);
+  try {
+    const mcpServers = await readMcpConfig();
+    await loadMcpServers(mcpServers);
+  } catch (err) {
+    console.warn("[mcp] Failed to load MCP servers:", errorMessage(err));
+  }
 
   publishWithBuffer("agent.started", { agent_id: agent.id, task });
 

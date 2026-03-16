@@ -609,6 +609,60 @@ export const api = {
     });
   },
 
+  async getMcpServers(): Promise<{
+    servers: Array<{
+      id: string;
+      name: string | null;
+      enabled: boolean;
+      transport: "stdio";
+      command: string;
+      args: string[];
+      env_configured: Record<string, boolean>;
+    }>;
+  }> {
+    return fetchJson("/api/mcp/servers");
+  },
+
+  async saveMcpServers(servers: Array<{
+    id: string;
+    name?: string | null;
+    enabled?: boolean;
+    transport?: "stdio";
+    command: string;
+    args?: string[];
+    env?: Record<string, string>;
+  }>): Promise<{ ok: boolean }> {
+    return fetchJson("/api/mcp/servers", {
+      method: "PUT",
+      body: JSON.stringify({ servers }),
+    });
+  },
+
+  async deleteMcpServer(id: string): Promise<{ ok: boolean }> {
+    const res = await fetch(`${BASE}/api/mcp/servers/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+    });
+    checkUnauthorized(res);
+    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+    return res.json() as Promise<{ ok: boolean }>;
+  },
+
+  async testMcpServer(server: {
+    id: string;
+    name?: string | null;
+    enabled?: boolean;
+    transport?: "stdio";
+    command: string;
+    args?: string[];
+    env?: Record<string, string>;
+  }): Promise<{ ok: boolean; tools: Array<{ name: string; description?: string }>; error?: string }> {
+    return fetchJson("/api/mcp/servers/test", {
+      method: "POST",
+      body: JSON.stringify(server),
+    });
+  },
+
   async regenerateDashboardToken(): Promise<{ token: string; message: string }> {
     return fetchJson("/api/settings/dashboard-token/regenerate", {
       method: "POST",

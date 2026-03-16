@@ -74,6 +74,93 @@ export interface AgentOsConfig {
   dashboard_secret?: string;
 }
 
+export interface McpServerConfig {
+  /** Stable id/slug for this server (used in tool ids). */
+  id: string;
+  /** Display name in UI. */
+  name?: string;
+  /** When false, server is ignored by runtime. */
+  enabled?: boolean;
+  /** Transport type. Start with stdio. */
+  transport?: "stdio";
+  /** Command to spawn (e.g. npx). */
+  command: string;
+  /** Args to pass (e.g. ["-y","@enescinar/twitter-mcp"]). */
+  args?: string[];
+  /** Environment variables for the spawned process (API keys, etc.). */
+  env?: Record<string, string>;
+}
+
+export interface McpConfigFile {
+  mcpServers: Record<string, Omit<McpServerConfig, "id"> & { id?: string }>;
+}
+
+export function getMcpConfigPath(): string {
+  return join(getAgentOsHome(), "mcp.json");
+}
+
+function isPlainObject(x: unknown): x is Record<string, unknown> {
+  return Boolean(x) && typeof x === "object" && !Array.isArray(x);
+}
+
+export async function readMcpConfig(): Promise<McpServerConfig[]> {
+  const path = getMcpConfigPath();
+  try {
+    const raw = await readFile(path, "utf-8");
+    const parsed = JSON.parse(raw) as unknown;
+    if (!isPlainObject(parsed)) return [];
+    const mcpServers = (parsed as Record<string, unknown>).mcpServers;
+    if (!isPlainObject(mcpServers)) return [];
+    const out: McpServerConfig[] = [];
+    for (const [key, value] of Object.entries(mcpServers)) {
+      if (!isPlainObject(value)) continue;
+      const id = (typeof value.id === "string" ? value.id : key).trim();
+      const command = typeof value.command === "string" ? value.command.trim() : "";
+      if (!id || !command) continue;
+      const cfg: McpServerConfig = {
+        id,
+        name: typeof value.name === "string" ? value.name : undefined,
+        enabled: value.enabled === false ? false : true,
+        transport: value.transport === "stdio" || value.transport == null ? "stdio" : "stdio",
+        command,
+        args: Array.isArray(value.args) ? (value.args as unknown[]).filter((a): a is string => typeof a === "string") : undefined,
+        env: isPlainObject(value.env)
+          ? Object.fromEntries(Object.entries(value.env).filter(([, v]) => typeof v === "string")) as Record<string, string>
+          : undefined,
+      };
+      out.push(cfg);
+    }
+    return out;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code !== "ENOENT") {
+      console.error("[config] readMcpConfig error:", err);
+    }
+    return [];
+  }
+}
+
+export async function writeMcpConfig(servers: McpServerConfig[]): Promise<void> {
+  const home = getAgentOsHome();
+  const path = getMcpConfigPath();
+  await mkdir(home, { recursive: true });
+  const mcpServers: McpConfigFile["mcpServers"] = {};
+  for (const s of servers) {
+    const id = s.id?.trim();
+    if (!id) continue;
+    mcpServers[id] = {
+      id,
+      name: s.name,
+      enabled: s.enabled !== false,
+      transport: "stdio",
+      command: s.command,
+      args: s.args,
+      env: s.env,
+    };
+  }
+  const payload: McpConfigFile = { mcpServers };
+  await writeFile(path, JSON.stringify(payload, null, 2), "utf-8");
+}
+
 export async function readConfig(): Promise<AgentOsConfig> {
   const path = getConfigPath();
   try {

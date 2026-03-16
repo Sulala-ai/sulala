@@ -18,7 +18,7 @@ registerTool({
   id: "exec",
   name: "exec",
   description:
-    "Run a shell command. Use 'command' (full string) and optionally 'skill_id' to run from that skill's dir (e.g. gmail). Without skill_id, runs in agent workspace. Returns stdout, stderr, exitCode, cwd, and outputFile when command writes a file (e.g. -o out.png). Recommended commands: doc/EXEC_TOOL_REFERENCE.md.",
+    "Run a shell command. ALWAYS set 'skill_id' when using a skill that runs scripts (e.g. 'youtube', 'bluesky', 'gmail') so the command runs in that skill's directory with its config. Without 'skill_id', the command runs in the agent workspace and will NOT see skill scripts under ~/.agent-os/skills. Use 'command' (full string). Returns stdout, stderr, exitCode, cwd, and outputFile when command writes a file (e.g. -o out.png). Recommended commands: doc/EXEC_TOOL_REFERENCE.md.",
   input_schema: {
     type: "object",
     properties: {

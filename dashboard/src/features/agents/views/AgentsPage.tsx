@@ -624,6 +624,28 @@ export function AgentsPage({ onNavigate }: { onNavigate?: (p: PageId) => void } 
                   <div>
                     <Label>Skills (optional)</Label>
                     <p className="text-xs text-muted-foreground mb-1">Pick installed skills. Each skill adds its own tools to the agent. Memory is included for all agents.</p>
+                    <div className="flex items-center gap-2 mb-2 text-xs text-muted-foreground">
+                      <button
+                        type="button"
+                        className="underline hover:text-primary"
+                        onClick={() => {
+                          const allIds = selectableSkills.map((s) => s.id);
+                          setCreateForm((f) => ({ ...f, skills: allIds.length ? allIds : undefined }));
+                        }}
+                      >
+                        Select all skills
+                      </button>
+                      <span>·</span>
+                      <button
+                        type="button"
+                        className="underline hover:text-primary"
+                        onClick={() => {
+                          setCreateForm((f) => ({ ...f, skills: undefined }));
+                        }}
+                      >
+                        Clear
+                      </button>
+                    </div>
                     <div className="flex flex-wrap gap-2">
                       {selectableSkills.map((s) => (
                         <label key={s.id} className="flex items-center gap-1.5 text-sm">
@@ -838,6 +860,28 @@ export function AgentsPage({ onNavigate }: { onNavigate?: (p: PageId) => void } 
               <div>
                 <Label>Skills (optional)</Label>
                 <p className="text-xs text-muted-foreground mb-1">Pick installed skills. Memory is included for all agents.</p>
+                <div className="flex items-center gap-2 mb-2 text-xs text-muted-foreground">
+                  <button
+                    type="button"
+                    className="underline hover:text-primary"
+                    onClick={() => {
+                      const allIds = selectableSkills.map((s) => s.id);
+                      setEditForm((f) => ({ ...f, skills: allIds }));
+                    }}
+                  >
+                    Select all skills
+                  </button>
+                  <span>·</span>
+                  <button
+                    type="button"
+                    className="underline hover:text-primary"
+                    onClick={() => {
+                      setEditForm((f) => ({ ...f, skills: [] }));
+                    }}
+                  >
+                    Clear
+                  </button>
+                </div>
                 <div className="flex flex-wrap gap-2">
                   {selectableSkills.map((s) => (
                     <label key={s.id} className="flex items-center gap-1.5 text-sm">

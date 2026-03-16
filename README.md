@@ -2,6 +2,26 @@
 
 Lightweight **Bun-based Agent Operating System** — micro-agents, installable skills, workflows, and a web dashboard.
 
+## How lightweight is Sulala?
+
+Compared to typical AI agent frameworks, **Sulala is extremely small** — the core repo is only on the order of **~100 KB**, and even with dependencies it stays around **sub‑MB scale**.
+
+| Framework   | Core size (approx.) | With dependencies (approx.) |
+| ----------- | ------------------- | ---------------------------- |
+| **Sulala**  | ~100–150 KB         | ~0.5–1 MB                    |
+| LangChain   | tens of MB          | 100+ MB                      |
+| CrewAI      | few MB              | 50–80 MB                     |
+| AutoGen     | tens of MB          | 150–300 MB                   |
+| AutoGPT     | tens of MB          | 200 MB+                      |
+
+Sulala stays tiny because it focuses on a **minimal runtime**:
+
+- **Core runtime + CLI + dashboard**
+- **Agents, skills, channels, tools**
+- **External AI providers** (OpenAI, Anthropic, OpenRouter, etc.)
+
+It does **not** bundle heavy Python stacks (numpy, vector DBs, complex orchestration engines), so it fits into the category of **“minimal runtime agent frameworks”**—closer to MicroGPT/SmolAgents than to large toolkits like LangChain.
+
 ## Install
 
 **From npm (Bun or Node 18+):**

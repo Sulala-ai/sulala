@@ -55,9 +55,10 @@ import { subscribe, type Event, type EventType } from "./core/events.js";
 import { listGraphs, loadGraph, saveGraph } from "./core/graphs.js";
 import { loadPlugins } from "./core/plugins.js";
 import { listSkills, getSkillConfigSchema, getSkillSetupMarkdown, getSkillMarketplace, getStoreRegistry, uninstallSkill, installSystemSkills } from "./skills/loader.js";
-import { getAgentOsHome } from "./core/config.js";
+import { getAgentOsHome, getDashboardSecret, getMemoryDbPath, readConfig, writeConfig, generateDashboardSecret } from "./core/config.js";
 import { join, dirname, resolve } from "node:path";
 import { mkdirSync, existsSync } from "node:fs";
+import { mkdir } from "node:fs/promises";
 
 const PORT = parseInt(process.env.PORT ?? "3010", 10);
 // Prefer dashboard-dist (used in published package); fallback to dashboard/dist (local dev)
@@ -69,6 +70,70 @@ const DASHBOARD_DIST = (() => {
   return b;
 })();
 const HOST = process.env.HOST ?? "127.0.0.1";
+
+function isAuthExempt(pathname: string, method: string): boolean {
+  if (method === "OPTIONS") return true;
+  if (method === "GET" && pathname === "/health") return true;
+  if (method === "GET" && pathname === "/api/bootstrap/dashboard-token") return true;
+  if (method === "GET" && pathname === "/api/bootstrap/workspace-status") return true;
+  if (method === "POST" && pathname === "/api/bootstrap/setup-workspace") return true;
+  if (method === "POST" && pathname === "/api/channels/telegram/webhook") return true;
+  if (method === "POST" && pathname === "/api/channels/slack/webhook") return true;
+  if (method === "POST" && pathname === "/api/channels/discord/webhook") return true;
+  if (method === "POST" && pathname === "/api/channels/signal/webhook") return true;
+  if (method === "POST" && pathname === "/api/channels/viber/webhook") return true;
+  return false;
+}
+
+function getTokenFromRequest(req: Request): string | null {
+  const auth = req.headers.get("Authorization");
+  if (auth?.startsWith("Bearer ")) return auth.slice(7).trim();
+  const url = new URL(req.url);
+  return url.searchParams.get("token")?.trim() ?? null;
+}
+
+function authUnauthorizedResponse(): Response {
+  return Response.json({ error: "Unauthorized" }, { status: 401, headers: CORS_HEADERS as HeadersInit });
+}
+
+function wrapWithAuth<T extends (req: Request) => Response | Promise<Response>>(
+  fn: T,
+  secret: string
+): T {
+  if (!secret) return fn;
+  return ((req: Request) => {
+    const url = new URL(req.url);
+    if (isAuthExempt(url.pathname, req.method)) return fn(req);
+    const token = getTokenFromRequest(req);
+    if (token !== secret) return authUnauthorizedResponse();
+    return fn(req);
+  }) as T;
+}
+
+function wrapRouteHandlers(
+  routes: Record<string, unknown>,
+  secret: string
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [path, value] of Object.entries(routes)) {
+    if (typeof value === "function") {
+      out[path] = wrapWithAuth(value as (req: Request) => Response | Promise<Response>, secret);
+    } else if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+      const methods: Record<string, unknown> = {};
+      for (const [method, handler] of Object.entries(value as Record<string, unknown>)) {
+        methods[method] =
+          typeof handler === "function"
+            ? wrapWithAuth(handler as (req: Request) => Response | Promise<Response>, secret)
+            : handler;
+      }
+      out[path] = methods;
+    } else {
+      out[path] = value;
+    }
+  }
+  return out;
+}
+
 const EVENT_TYPES: EventType[] = [
   "task.created",
   "task.started",
@@ -81,8 +146,7 @@ const EVENT_TYPES: EventType[] = [
 ];
 
 const wsClients = new Set<{ send: (data: string) => void }>();
-const MEMORY_DB_PATH =
-  process.env.AGENT_MEMORY_DB_PATH ?? join(getAgentOsHome(), "database.db");
+const MEMORY_DB_PATH = getMemoryDbPath();
 mkdirSync(dirname(MEMORY_DB_PATH), { recursive: true });
 const memoryStore = new MemoryStore(MEMORY_DB_PATH);
 setAgentStore(memoryStore);
@@ -389,9 +453,59 @@ function createRoutes(): Record<string, unknown> {
     "/api/conversations/summarize": {
       POST: (req: Request) => handleConversationSummarize(req, memoryStore),
     },
+    "/api/bootstrap/dashboard-token": {
+      GET: async () => {
+        const config = await readConfig();
+        if (config.onboarding_completed === true) {
+          return Response.json(
+            { error: "Onboarding already completed. Use the login page." },
+            { status: 403, headers: CORS_HEADERS as HeadersInit }
+          );
+        }
+        const token = await getDashboardSecret();
+        return jsonResponse({ token });
+      },
+    },
+    "/api/bootstrap/workspace-status": {
+      GET: async () => {
+        try {
+          await mkdir(getAgentOsHome(), { recursive: true });
+          await mkdir(dirname(getMemoryDbPath()), { recursive: true });
+          await loadAgents();
+          return jsonResponse({ ready: true });
+        } catch (err) {
+          const msg = errorMessage(err);
+          return jsonResponse({ ready: false, error: msg }, 200);
+        }
+      },
+    },
+    "/api/bootstrap/setup-workspace": {
+      POST: async () => {
+        try {
+          await mkdir(getAgentOsHome(), { recursive: true });
+          await mkdir(dirname(getMemoryDbPath()), { recursive: true });
+          await seedAgentsIfEmpty();
+          const { installed } = await installSystemAgents();
+          return jsonResponse({ ok: true, installed });
+        } catch (err) {
+          const msg = errorMessage(err);
+          return jsonResponse({ error: msg }, 400);
+        }
+      },
+    },
     "/api/settings": {
       GET: (req: Request) => handleSettings(req),
       PUT: (req: Request) => handleSettings(req),
+    },
+    "/api/settings/dashboard-token/regenerate": {
+      POST: async () => {
+        const token = generateDashboardSecret();
+        await writeConfig({ dashboard_secret: token });
+        return jsonResponse({
+          token,
+          message: "Restart the server for the new token to take effect.",
+        });
+      },
     },
     "/api/channels/telegram/webhook": {
       POST: (req: Request) => handleTelegramWebhook(req, memoryStore),
@@ -531,6 +645,8 @@ export async function startServer(): Promise<void> {
   await loadPlugins();
   await seedAgentsIfEmpty();
 
+  const dashboardSecret = await getDashboardSecret();
+
   const dashboardMissing = !existsSync(DASHBOARD_DIST) || !existsSync(join(DASHBOARD_DIST, "index.html"));
   if (dashboardMissing) {
     console.warn(
@@ -538,15 +654,23 @@ export async function startServer(): Promise<void> {
     );
   }
 
-  const server = Bun.serve({
+  let server: ReturnType<typeof Bun.serve>;
+  try {
+    server = Bun.serve({
     port: PORT,
     hostname: HOST,
     idleTimeout: 120, // seconds; allow long agent runs (LLM + tool calls). Default 10s was too short.
-    routes: createRoutes() as NonNullable<Parameters<typeof Bun.serve>[0]>["routes"],
+    routes: wrapRouteHandlers(createRoutes(), dashboardSecret) as NonNullable<Parameters<typeof Bun.serve>[0]>["routes"],
     fetch(req, server) {
       const url = new URL(req.url);
       // WebSocket upgrade must run in fetch (needs server reference)
       if (req.method === "GET" && url.pathname === "/api/events") {
+        if (dashboardSecret) {
+          const token = url.searchParams.get("token")?.trim() ?? getTokenFromRequest(req);
+          if (token !== dashboardSecret) {
+            return authUnauthorizedResponse();
+          }
+        }
         if (server.upgrade(req, { data: undefined })) return undefined as unknown as Response;
         return Response.json({ error: "Upgrade failed" }, { status: 500, headers: CORS_HEADERS as HeadersInit });
       }
@@ -581,7 +705,16 @@ export async function startServer(): Promise<void> {
       message() { },
     },
   });
+  } catch (err: unknown) {
+    const e = err as NodeJS.ErrnoException;
+    if (e?.code === "EADDRINUSE" || e?.errno === 48) {
+      throw new Error(
+        `Port ${PORT} is already in use. Stop the other process (e.g. sulala stop) or use a different port: PORT=3011 sulala start`
+      );
+    }
+    throw err;
+  }
 
-  console.log(`Agent OS server running at ${server.url}`);
+  console.log(`Agent OS server running at ${server!.url}`);
   startTelegramPolling(memoryStore);
 }

@@ -1,3 +1,7 @@
-# Intentionally empty.
-# This disables npm's fallback to .gitignore during publish/pack.
-# Packaging is controlled by package.json "files" (dist, dashboard/dist, data).
+# Exclude runtime database and secrets from package (security).
+data/database.db
+*.db
+.env
+.env.*
+
+# Packaging is controlled by package.json "files" (dist, dashboard-dist, data/agents, data/skills, data/templates).

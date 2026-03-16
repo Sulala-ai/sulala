@@ -5,7 +5,8 @@
 
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { join, resolve, relative } from "node:path";
+import { join, resolve, relative, dirname } from "node:path";
+import { randomBytes } from "node:crypto";
 
 const DEFAULT_HOME = join(
   process.env.HOME || process.env.USERPROFILE || "~",
@@ -18,6 +19,18 @@ export function getAgentOsHome(): string {
 
 export function getConfigPath(): string {
   return join(getAgentOsHome(), "config.json");
+}
+
+/**
+ * Path to the SQLite database. When AGENT_OS_AGENTS_DIR is set (e.g. ./data/agents),
+ * the DB is placed next to it (e.g. ./data/database.db) so it stays on local disk and
+ * avoids SQLITE_IOERR_VNODE on macOS when ~/.agent-os is on iCloud or a sync volume.
+ */
+export function getMemoryDbPath(): string {
+  if (process.env.AGENT_MEMORY_DB_PATH) return process.env.AGENT_MEMORY_DB_PATH;
+  const agentsDir = process.env.AGENT_OS_AGENTS_DIR;
+  if (agentsDir) return join(dirname(agentsDir), "database.db");
+  return join(getAgentOsHome(), "database.db");
 }
 
 export interface AgentOsConfig {
@@ -55,6 +68,10 @@ export interface AgentOsConfig {
   viber_default_agent_id?: string;
   /** When true, dashboard onboarding/setup wizard has been completed (stored in ~/.agent-os/config.json). */
   onboarding_completed?: boolean;
+  /** Skills store registry URL (e.g. https://hub.sulala.ai/api/sulalahub/registry). Set at onboard; override with SKILLS_REGISTRY_URL. */
+  skills_registry_url?: string;
+  /** Dashboard gateway token. When set, dashboard and API require Authorization: Bearer <token>. Generated on first run if not set; override with DASHBOARD_SECRET env. */
+  dashboard_secret?: string;
 }
 
 export async function readConfig(): Promise<AgentOsConfig> {
@@ -83,6 +100,8 @@ export async function readConfig(): Promise<AgentOsConfig> {
       const viber_auth_token = o.viber_auth_token;
       const viber_default_agent_id = o.viber_default_agent_id;
       const onboarding_completed = o.onboarding_completed;
+      const skills_registry_url = o.skills_registry_url;
+      const dashboard_secret = o.dashboard_secret;
       return {
         provider:
           provider === "openrouter" || provider === "openai"
@@ -106,6 +125,8 @@ export async function readConfig(): Promise<AgentOsConfig> {
         viber_auth_token: typeof viber_auth_token === "string" ? viber_auth_token : undefined,
         viber_default_agent_id: typeof viber_default_agent_id === "string" ? viber_default_agent_id : undefined,
         onboarding_completed: onboarding_completed === true ? true : undefined,
+        skills_registry_url: typeof skills_registry_url === "string" ? skills_registry_url.trim() || undefined : undefined,
+        dashboard_secret: typeof dashboard_secret === "string" ? dashboard_secret.trim() || undefined : undefined,
       };
     }
   } catch (err) {
@@ -114,6 +135,39 @@ export async function readConfig(): Promise<AgentOsConfig> {
     }
   }
   return {};
+}
+
+/** Default model ids per provider, used when installing default agents so they use a configured key. Prefer current/latest model ids. */
+const DEFAULT_MODEL_BY_PROVIDER = {
+  google: "gemini-2.0-flash",
+  anthropic: "claude-sonnet-4-6",
+  openrouter: "openai/gpt-4o-mini",
+  openai: "gpt-4o-mini",
+} as const;
+
+/**
+ * Returns a model id for the first provider that has an API key set (env or config).
+ * Used when installing default agents so they don't error with "No LLM API key".
+ */
+export async function getDefaultModelForAvailableProvider(): Promise<string | null> {
+  const config = await readConfig();
+  const googleKey =
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim() || config.google_api_key?.trim();
+  if (googleKey) return DEFAULT_MODEL_BY_PROVIDER.google;
+  const anthropicKey =
+    process.env.ANTHROPIC_API_KEY?.trim() || config.anthropic_api_key?.trim();
+  if (anthropicKey) return DEFAULT_MODEL_BY_PROVIDER.anthropic;
+  const openrouterKey =
+    process.env.OPENROUTER_API_KEY?.trim() ||
+    config.openrouter_api_key?.trim() ||
+    (config.provider === "openrouter" ? config.api_key?.trim() : undefined);
+  if (openrouterKey) return DEFAULT_MODEL_BY_PROVIDER.openrouter;
+  const openaiKey =
+    process.env.OPENAI_API_KEY?.trim() ||
+    config.openai_api_key?.trim() ||
+    (config.provider === "openai" ? config.api_key?.trim() : undefined);
+  if (openaiKey) return DEFAULT_MODEL_BY_PROVIDER.openai;
+  return null;
 }
 
 export async function writeConfig(updates: Partial<AgentOsConfig>): Promise<void> {
@@ -138,6 +192,8 @@ export async function writeConfig(updates: Partial<AgentOsConfig>): Promise<void
     viber_auth_token: updates.viber_auth_token !== undefined ? updates.viber_auth_token : current.viber_auth_token,
     viber_default_agent_id: updates.viber_default_agent_id !== undefined ? updates.viber_default_agent_id : current.viber_default_agent_id,
     onboarding_completed: updates.onboarding_completed !== undefined ? updates.onboarding_completed : current.onboarding_completed,
+    skills_registry_url: updates.skills_registry_url !== undefined ? updates.skills_registry_url : current.skills_registry_url,
+    dashboard_secret: updates.dashboard_secret !== undefined ? updates.dashboard_secret : current.dashboard_secret,
   };
   const home = getAgentOsHome();
   const path = getConfigPath();
@@ -165,12 +221,52 @@ export async function writeConfig(updates: Partial<AgentOsConfig>): Promise<void
         viber_auth_token: merged.viber_auth_token ?? null,
         viber_default_agent_id: merged.viber_default_agent_id ?? null,
         onboarding_completed: merged.onboarding_completed ?? null,
+        skills_registry_url: merged.skills_registry_url ?? null,
+        dashboard_secret: merged.dashboard_secret ?? null,
       },
       null,
       2
     ),
     "utf-8"
   );
+}
+
+const DEFAULT_SKILLS_REGISTRY_URL = "https://hub.sulala.ai/api/sulalahub/registry";
+
+/** Resolve skills store registry URL: env SKILLS_REGISTRY_URL overrides config; config is set at onboard. */
+export async function getSkillsRegistryUrl(): Promise<string | null> {
+  const env = process.env.SKILLS_REGISTRY_URL?.trim();
+  if (env) return env;
+  const config = await readConfig();
+  const fromConfig = config.skills_registry_url?.trim();
+  if (fromConfig) return fromConfig;
+  return DEFAULT_SKILLS_REGISTRY_URL;
+}
+
+/** Generate a new dashboard gateway token (base64url, 32 bytes). */
+export function generateDashboardSecret(): string {
+  return randomBytes(32).toString("base64url");
+}
+
+/**
+ * Resolve dashboard secret for gateway auth: DASHBOARD_SECRET env overrides config;
+ * if neither set, generate and store in config so dashboard is protected by default when deployed.
+ */
+export async function getDashboardSecret(): Promise<string> {
+  const env = process.env.DASHBOARD_SECRET?.trim();
+  if (env) return env;
+  let config = await readConfig();
+  let secret = config.dashboard_secret?.trim();
+  if (secret) return secret;
+  secret = generateDashboardSecret();
+  await writeConfig({ dashboard_secret: secret });
+  return secret;
+}
+
+/** Read dashboard secret from config only (no env, no auto-generate). For CLI show/regenerate. */
+export async function getDashboardSecretFromConfig(): Promise<string | undefined> {
+  const config = await readConfig();
+  return config.dashboard_secret?.trim() || undefined;
 }
 
 /** Directory for per-skill config files (~/.agent-os/configs). */

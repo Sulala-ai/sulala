@@ -9,7 +9,7 @@ import { join } from "node:path";
 import type { MemoryStore } from "../db/memory-store.js";
 import type { AgentConfig } from "../types/agent.js";
 import { parseAgentConfig } from "../types/agent.js";
-import { ensureWorkspace, getWorkspaceDir, getTemplatesDir } from "./config.js";
+import { ensureWorkspace, getWorkspaceDir, getTemplatesDir, getDefaultModelForAvailableProvider } from "./config.js";
 
 const DEFAULT_AGENTS_DIR = join(
   process.env.HOME || process.env.USERPROFILE || "~",
@@ -44,7 +44,8 @@ function getSeedAgentsDir(): string {
 async function insertSeedAgentFromFile(
   seedDir: string,
   name: string,
-  skipIfExists: boolean
+  skipIfExists: boolean,
+  modelOverride?: string | null
 ): Promise<boolean> {
   if (!agentStore) return false;
   const path = join(seedDir, name);
@@ -53,10 +54,12 @@ async function insertSeedAgentFromFile(
   const id = parsed?.id;
   if (typeof id !== "string" || !id.trim()) return false;
   if (skipIfExists && agentStore.getAgentById(id)) return false;
+  const seedModel = String(parsed.model ?? "").trim();
+  const model = (modelOverride?.trim() || seedModel) || "gpt-4o-mini";
   const payload: Record<string, unknown> = {
     id: String(parsed.id).trim(),
     name: String(parsed.name ?? "").trim(),
-    model: String(parsed.model ?? "").trim(),
+    model,
     description: parsed.description != null ? String(parsed.description) : undefined,
     personality: parsed.personality != null ? String(parsed.personality) : undefined,
     skills: ensureMemoryInSkills(Array.isArray(parsed.skills) ? (parsed.skills as string[]) : undefined),
@@ -78,7 +81,7 @@ async function insertSeedAgentFromFile(
   }
 }
 
-/** Seed agents from a directory of JSON files (e.g. data/agents) when the DB table is empty. Call after setAgentStore. */
+/** Seed agents from a directory of JSON files (e.g. data/agents) when the DB table is empty. Call after setAgentStore. Uses a model for the first provider that has an API key when set. */
 export async function seedAgentsIfEmpty(): Promise<void> {
   if (!agentStore || !agentStore.isAgentsTableEmpty()) return;
   const seedDir = getSeedAgentsDir();
@@ -88,17 +91,18 @@ export async function seedAgentsIfEmpty(): Promise<void> {
   } catch {
     return;
   }
+  const modelOverride = await getDefaultModelForAvailableProvider();
   for (const name of entries) {
     if (!name.endsWith(".json")) continue;
     try {
-      await insertSeedAgentFromFile(seedDir, name, false);
+      await insertSeedAgentFromFile(seedDir, name, false, modelOverride);
     } catch (err) {
       console.error(`[agent-registry] Failed to seed ${name}:`, err);
     }
   }
 }
 
-/** Install system agents from seed dir (data/agents). Skips agents that already exist. Returns number installed. Only works when using SQLite. */
+/** Install system agents from seed dir (data/agents). Skips agents that already exist. Uses a model for the first provider that has an API key in settings so default agents work without error. If an agent already exists and a provider is configured, updates its model to that provider's default. Returns number installed. Only works when using SQLite. */
 export async function installSystemAgents(): Promise<{ installed: number }> {
   if (!agentStore) throw new Error("Install from system is only available when using SQLite storage.");
   const seedDir = getSeedAgentsDir();
@@ -108,11 +112,22 @@ export async function installSystemAgents(): Promise<{ installed: number }> {
   } catch (err) {
     throw new Error(`Seed directory not found: ${seedDir}`);
   }
+  const modelOverride = await getDefaultModelForAvailableProvider();
   let installed = 0;
   for (const name of entries) {
     if (!name.endsWith(".json")) continue;
     try {
-      const added = await insertSeedAgentFromFile(seedDir, name, true);
+      const path = join(seedDir, name);
+      const raw = await readFile(path, "utf-8");
+      const parsed = JSON.parse(raw) as { id?: string };
+      const id = typeof parsed?.id === "string" ? parsed.id.trim() : null;
+      if (id && modelOverride) {
+        const existing = agentStore.getAgentById(id);
+        if (existing) {
+          await updateAgent(id, { model: modelOverride });
+        }
+      }
+      const added = await insertSeedAgentFromFile(seedDir, name, true, modelOverride);
       if (added) installed += 1;
     } catch (err) {
       console.error(`[agent-registry] Install failed for ${name}:`, err);

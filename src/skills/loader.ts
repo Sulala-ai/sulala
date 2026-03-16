@@ -10,7 +10,7 @@ import { readFile, readdir, cp, mkdir, writeFile, rm } from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import { join, resolve, basename } from "node:path";
 import { tmpdir } from "node:os";
-import { getAgentOsHome, getSkillsDir, getSeedSkillsDir } from "../core/config.js";
+import { getAgentOsHome, getSkillsDir, getSeedSkillsDir, getSkillsRegistryUrl } from "../core/config.js";
 import type { AgentConfig } from "../types/agent.js";
 import { registerTool, unregisterSkillTools } from "../core/tool-registry.js";
 
@@ -222,7 +222,7 @@ export async function getStoreRegistry(): Promise<{
   storeBase: string | null;
   registryUrl: string | null;
 }> {
-  const registryUrl = process.env.SKILLS_REGISTRY_URL?.trim() ?? null;
+  const registryUrl = await getSkillsRegistryUrl();
   if (!registryUrl) return { skills: [], storeBase: null, registryUrl: null };
   let storeBase: string | null = null;
   try {
@@ -385,7 +385,8 @@ export async function installSystemSkills(): Promise<{ installed: number }> {
     }
     if (alreadyInstalled) continue;
     try {
-      await installSkillFromPath(sourcePath);
+      await mkdir(skillsDir, { recursive: true });
+      await cp(sourcePath, destPath, { recursive: true });
       installed += 1;
     } catch (err) {
       console.error(`[skills] Install system skill ${id} failed:`, err);

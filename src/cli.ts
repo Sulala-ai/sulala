@@ -13,7 +13,14 @@
 import { join, dirname } from "node:path";
 import { readFile, writeFile, mkdir, unlink } from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
-import { getAgentOsHome } from "./core/config.js";
+import {
+  getAgentOsHome,
+  getDashboardSecret,
+  getDashboardSecretFromConfig,
+  getMemoryDbPath,
+  writeConfig,
+  generateDashboardSecret,
+} from "./core/config.js";
 import { MemoryStore } from "./db/memory-store.js";
 import { setAgentStore, seedAgentsIfEmpty, installSystemAgents } from "./core/agent-registry.js";
 import { installSystemSkills } from "./skills/loader.js";
@@ -67,6 +74,7 @@ Commands:
   onboard              First-time setup: create config, seed agents & skills, open dashboard
   update               Update package from npm and system agents/skills
   run <agent_id> <task>  Run an agent with a one-off task
+  dashboard-token [--regenerate]  Show or regenerate dashboard login token (copy to log in)
 
 Examples:
   sulala version
@@ -76,6 +84,8 @@ Examples:
   sulala onboard
   sulala update
   sulala run echo_agent What is 2+2?
+  sulala dashboard-token
+  sulala dashboard-token --regenerate
 `);
 }
 
@@ -134,9 +144,6 @@ async function cmdStop(): Promise<void> {
   console.log("Sulala server stopped.");
 }
 
-function getMemoryDbPath(): string {
-  return process.env.AGENT_MEMORY_DB_PATH ?? join(getAgentOsHome(), "database.db");
-}
 
 /** Start the server in the background if not already running. Returns true if started, false if already running. */
 async function startServerDaemonIfNeeded(): Promise<boolean> {
@@ -175,6 +182,7 @@ async function cmdOnboard(): Promise<void> {
 
   const configPath = join(home, "config.json");
   if (!existsSync(configPath)) {
+    const dashboardSecret = generateDashboardSecret();
     await writeFile(
       configPath,
       JSON.stringify(
@@ -197,6 +205,8 @@ async function cmdOnboard(): Promise<void> {
           signal_default_agent_id: null,
           viber_auth_token: null,
           viber_default_agent_id: null,
+          skills_registry_url: "https://hub.sulala.ai/api/sulalahub/registry",
+          dashboard_secret: dashboardSecret,
         },
         null,
         2
@@ -204,6 +214,7 @@ async function cmdOnboard(): Promise<void> {
       "utf-8"
     );
     console.log("Created", configPath);
+    console.log("Dashboard token generated. Run 'sulala dashboard-token' to view or copy it.");
   }
 
   const memoryStore = new MemoryStore(getMemoryDbPath());
@@ -220,6 +231,12 @@ async function cmdOnboard(): Promise<void> {
     await new Promise((r) => setTimeout(r, 1500));
   }
   openDashboard();
+
+  const token = await getDashboardSecret();
+  console.log("");
+  console.log("Dashboard login token (copy and paste in the dashboard):");
+  console.log(token);
+  console.log("");
 }
 
 const NPM_PACKAGE = "@sulala/agent-os";
@@ -253,6 +270,28 @@ async function cmdUpdate(): Promise<void> {
   const { installed: agentsInstalled } = await installSystemAgents();
   const { installed: skillsInstalled } = await installSystemSkills();
   console.log("Update complete. New agents:", agentsInstalled, "New skills:", skillsInstalled);
+}
+
+async function cmdDashboardToken(args: string[]): Promise<void> {
+  const regenerate = args.includes("--regenerate");
+  if (regenerate) {
+    const token = generateDashboardSecret();
+    await writeConfig({ dashboard_secret: token });
+    console.log(token);
+    console.log("");
+    console.log("Dashboard token regenerated. Copy the token above and use it to log in to the dashboard.");
+    console.log("Restart the server if it is already running for the new token to take effect.");
+    return;
+  }
+  const token = await getDashboardSecretFromConfig();
+  if (!token) {
+    console.log("No dashboard token in config yet. Start the server once to auto-generate one, or run:");
+    console.log("  sulala dashboard-token --regenerate");
+    return;
+  }
+  console.log(token);
+  console.log("");
+  console.log("Copy the token above and use it to log in to the dashboard. To regenerate: sulala dashboard-token --regenerate");
 }
 
 async function cmdRun(args: string[]): Promise<void> {
@@ -313,6 +352,9 @@ async function main(): Promise<void> {
       break;
     case "run":
       await cmdRun(rest);
+      break;
+    case "dashboard-token":
+      await cmdDashboardToken(rest);
       break;
     case "help":
     case "-h":

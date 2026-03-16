@@ -1,6 +1,6 @@
 {
   "name": "@sulala/agent-os",
-  "version": "0.1.13",
+  "version": "0.1.20",
   "publishConfig": {
     "access": "public"
   },
@@ -24,7 +24,9 @@
   "files": [
     "dist",
     "dashboard-dist",
-    "data"
+    "data/agents",
+    "data/skills",
+    "data/templates"
   ],
   "engines": {
     "bun": ">=1.0.0"

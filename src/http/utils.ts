@@ -4,7 +4,7 @@ import type { MemoryStore } from "../db/memory-store.js";
 export const CORS_HEADERS: HeadersInit = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
 /** JSON response with CORS headers (Bun-native Response.json + our CORS). */

@@ -9,6 +9,8 @@ dashboard/dist/
 dashboard-dist/
 node_modules/
 dashboard/node_modules/
+data/database.db
+*.db
 
 .env
 examples/

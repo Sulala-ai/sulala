@@ -1,0 +1,2 @@
+# Intentionally empty so npm does not use this dir's .gitignore when packing.
+# package.json "files" includes dashboard/dist; this allows it to be included.

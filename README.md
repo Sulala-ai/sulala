@@ -1,6 +1,6 @@
 # Sulala Agent OS
 
-Lightweight **Bun-based Agent Operating System** — micro-agents, installable skills, workflows, and a web dashboard.
+Lightweight **Bun-based Agent Operating System** for **graph-based, collaborative micro-agents** — agents work together in workflows instead of a single-agent loop. It includes installable skills, workflows, and a web dashboard, and is designed to stay under **1 MB**.
 
 ## Showcase
 
@@ -27,6 +27,7 @@ Compared to typical AI agent frameworks, **Sulala is extremely small** — the c
 Sulala stays tiny because it focuses on a **minimal runtime**:
 
 - **Core runtime + CLI + dashboard**
+- **Graph-based multi-agent collaboration**
 - **Agents, skills, channels, tools**
 - **External AI providers** (OpenAI, Anthropic, OpenRouter, etc.)
 

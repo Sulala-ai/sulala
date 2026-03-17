@@ -1,47 +1,51 @@
-import { useEffect, useState } from "react";
-import { api, type AgentSummary } from "@/lib/api";
+ "use client";
+
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { api, type AgentSummary, type MemoryGraphNode, type MemoryGraphEdge } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { BrainIcon, SearchIcon, PlusIcon, Trash2Icon } from "lucide-react";
 
-export interface MemoryResult {
-  id: number;
-  user_id: string | null;
-  agent_id: string;
-  scope?: string;
-  text: string;
-  tags?: unknown;
-  created_at: string;
-}
-
-function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString(undefined, {
-      dateStyle: "short",
-      timeStyle: "short",
-    });
-  } catch {
-    return iso;
-  }
-}
+import { BrainIcon, SearchIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { DotPattern } from "@/components/ui/dot-pattern";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import ForceGraph2D from "react-force-graph-2d";
 
 export function MemoryPage() {
   const [agents, setAgents] = useState<AgentSummary[]>([]);
-  const [results, setResults] = useState<MemoryResult[]>([]);
+  const [graphNodes, setGraphNodes] = useState<MemoryGraphNode[]>([]);
+  const [graphEdges, setGraphEdges] = useState<MemoryGraphEdge[]>([]);
+  const [graphLoading, setGraphLoading] = useState(false);
+  const [graphError, setGraphError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [q, setQ] = useState("");
-  const [agentFilter, setAgentFilter] = useState("");
-  const [addAgentId, setAddAgentId] = useState("");
-  const [addText, setAddText] = useState("");
-  const [addSaving, setAddSaving] = useState(false);
-  const [addError, setAddError] = useState<string | null>(null);
-  const [addSuccess, setAddSuccess] = useState(false);
-  const [semantic, setSemantic] = useState(false);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const graphRef = useRef<any>(null);
+  const graphWrapRef = useRef<HTMLDivElement | null>(null);
+  const [graphSize, setGraphSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+
+  const selectedNode = selectedNodeId
+    ? graphNodes.find((n) => n.id === selectedNodeId) ?? null
+    : null;
+
+  const selectedNodeLabel = (() => {
+    if (!selectedNode) return "";
+    if (selectedNode.type === "agent") {
+      const agentId = (selectedNode as any).agent_id as string | undefined;
+      const agent = agentId ? agents.find((a) => a.id === agentId) : undefined;
+      return agent?.name ?? agentId ?? selectedNode.id;
+    }
+    if (selectedNode.type === "tag") return String((selectedNode as any).label ?? selectedNode.id);
+    if (selectedNode.type === "memory") return String((selectedNode as any).label ?? (selectedNode as any).text ?? selectedNode.id);
+    return selectedNode.id;
+  })();
+
+  const selectedConnected = (() => {
+    if (!selectedNode) return { incoming: [] as string[], outgoing: [] as string[] };
+    const incoming = graphEdges.filter((e) => e.to === selectedNode.id).map((e) => e.from);
+    const outgoing = graphEdges.filter((e) => e.from === selectedNode.id).map((e) => e.to);
+    return { incoming, outgoing };
+  })();
 
   useEffect(() => {
     api
@@ -51,218 +55,263 @@ export function MemoryPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  // Preselect agent and run search when navigating from Agents page (e.g. "Manage memory" link)
   useEffect(() => {
-    try {
-      const preset = sessionStorage.getItem("memoryFilterAgentId");
-      if (preset) {
-        sessionStorage.removeItem("memoryFilterAgentId");
-        setAgentFilter(preset);
-        setSearching(true);
-        setError(null);
-        api
-          .searchMemory({ agent_id: preset, limit: 50, semantic: false })
-          .then((r) => setResults(r.results as MemoryResult[]))
-          .catch((e) => setError(e.message))
-          .finally(() => setSearching(false));
-      }
-    } catch {
-      /* ignore */
-    }
+    // Auto-load graph on mount (no filters).
+    loadGraph();
   }, []);
 
-  function runSearch() {
-    setSearching(true);
-    setError(null);
-    api
-      .searchMemory({
-        q: q.trim() || undefined,
-        agent_id: agentFilter.trim() || undefined,
-        limit: 50,
-        semantic,
-      })
-      .then((r) => setResults(r.results as MemoryResult[]))
-      .catch((e) => setError(e.message))
-      .finally(() => setSearching(false));
-  }
+  useLayoutEffect(() => {
+    const el = graphWrapRef.current;
+    if (!el) return;
+    const update = () => {
+      const rect = el.getBoundingClientRect();
+      const w = Math.max(0, Math.floor(rect.width));
+      const h = Math.max(0, Math.floor(rect.height));
+      setGraphSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
+    };
+    update();
+    const ro = new ResizeObserver(() => update());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
-  function handleDelete(id: number) {
-    if (!confirm("Delete this memory?")) return;
-    setDeletingId(id);
+  function loadGraph() {
+    setGraphLoading(true);
+    setGraphError(null);
     api
-      .deleteMemory(id)
-      .then(() => setResults((prev) => prev.filter((m) => m.id !== id)))
-      .catch((e) => setError(e.message))
-      .finally(() => setDeletingId(null));
-  }
-
-  function handleAddMemory() {
-    if (!addAgentId.trim() || !addText.trim()) {
-      setAddError("Agent and text are required.");
-      return;
-    }
-    setAddSaving(true);
-    setAddError(null);
-    setAddSuccess(false);
-    api
-      .writeMemory({
-        agent_id: addAgentId.trim(),
-        text: addText.trim(),
+      .getMemoryGraph({
+        q: undefined,
+        agent_id: undefined,
+        limit: 200,
       })
-      .then(() => {
-        setAddText("");
-        setAddSuccess(true);
-        runSearch();
+      .then((r) => {
+        setGraphNodes(r.nodes ?? []);
+        setGraphEdges(r.edges ?? []);
       })
-      .catch((e) => setAddError(e.message))
-      .finally(() => setAddSaving(false));
+      .catch((e) => setGraphError(e.message))
+      .finally(() => setGraphLoading(false));
   }
 
   if (loading) return <div className="p-4 text-muted-foreground">Loading…</div>;
 
   return (
-    <div className="space-y-8 p-6 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
-          <BrainIcon className="size-6" />
-          Memory
-        </h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Long-term memories stored by agents (via the memory skill). Search and add memories here.
-        </p>
+    <div className="space-y-6 p-6 w-full max-w-full overflow-x-hidden">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
+            <BrainIcon className="size-6" />
+            Memory graph
+          </h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            Visualize long-term memories stored by agents.
+          </p>
+        </div>
+        <Button onClick={loadGraph} disabled={graphLoading}>
+          <SearchIcon className="size-4 mr-1" />
+          {graphLoading ? "Loading…" : "Reload"}
+        </Button>
+      </div>
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      {graphError && <p className="text-sm text-destructive">{graphError}</p>}
+
+      {/* Graph view only */}
+      <div className="w-full max-w-full overflow-x-hidden">
+        <div>
+          <h2 className="text-base">Graph</h2>
+          <p className="text-sm text-muted-foreground">
+            {graphLoading
+              ? "Loading memory graph…"
+              : `${graphNodes.length} nodes · ${graphEdges.length} edges`}
+          </p>
+        </div>
+        <div className="w-full max-w-full overflow-x-hidden">
+          <div
+            ref={graphWrapRef}
+            className="bg-background relative flex h-[500px] w-full max-w-full flex-col items-center justify-center overflow-hidden rounded-lg"
+          >
+            <DotPattern
+              className={cn(
+                "[mask-image:radial-gradient(300px_circle_at_center,white,transparent)]"
+              )}
+            />
+            {graphLoading ? (
+              <div className="h-full w-full flex items-center justify-center text-sm text-muted-foreground relative z-10">
+                <span>Loading memory graph…</span>
+              </div>
+            ) : graphNodes.length === 0 ? (
+              <div className="h-full w-full flex items-center justify-center text-sm text-muted-foreground relative z-10">
+                <span>No graph data yet. Run a search and load the graph.</span>
+              </div>
+            ) : (
+              <div className="h-full w-full max-w-full relative z-10 overflow-hidden">
+                <ForceGraph2D
+                  ref={graphRef as any}
+                  width={graphSize.w || undefined}
+                  height={graphSize.h || undefined}
+                  graphData={{
+                    nodes: graphNodes.map((n) => ({
+                      id: n.id,
+                      label:
+                        n.type === "agent"
+                          ? (agents.find((a) => a.id === (n as any).agent_id)?.name ?? (n as any).agent_id)
+                          : n.type === "memory"
+                          ? String((n as any).label ?? (n as any).text ?? n.id)
+                          : n.type === "tag"
+                          ? String((n as any).label ?? n.id)
+                          : n.id,
+                      type: n.type,
+                    })),
+                    links: graphEdges.map((e) => ({
+                      source: e.from,
+                      target: e.to,
+                      type: e.type,
+                    })),
+                  }}
+                  onNodeClick={(node) => {
+                    const id = String((node as any).id ?? "");
+                    if (!id) return;
+                    setSelectedNodeId(id);
+                    setDetailsOpen(true);
+                  }}
+                  nodeCanvasObject={(node, ctx, globalScale) => {
+                    const label = (node as any).label as string;
+                    const type = (node as any).type as string;
+                    const fontSize = 12 / globalScale;
+                    const radius = 6;
+                    ctx.beginPath();
+                    if (type === "agent") {
+                      ctx.fillStyle = "#0f172a"; // dark
+                    } else if (type === "tag") {
+                      ctx.fillStyle = "#16a34a"; // green
+                    } else {
+                      ctx.fillStyle = "#2563eb"; // blue for memories
+                    }
+                    ctx.arc(node.x!, node.y!, radius, 0, 2 * Math.PI, false);
+                    ctx.fill();
+                    ctx.font = `${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+                    ctx.textAlign = "left";
+                    ctx.textBaseline = "middle";
+                    ctx.fillStyle = "#111827";
+                    ctx.fillText(label, node.x! + radius + 3, node.y!);
+                  }}
+                  linkColor={(link) =>
+                    (link as any).type === "tagged" ? "rgba(22,163,74,0.4)" : "rgba(148,163,184,0.6)"
+                  }
+                  linkWidth={1}
+                  cooldownTicks={60}
+                  onEngineStop={() => {
+                    const g = graphRef.current as any;
+                    if (g) g.zoomToFit(400);
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Search memories</CardTitle>
-          <CardDescription>Filter by text or agent. Leave search empty to list recent memories.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex flex-wrap gap-2 items-end">
-            <div className="flex-1 min-w-[200px]">
-              <Label className="text-xs">Query (optional)</Label>
-              <Input
-                placeholder="Search in memory text…"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && runSearch()}
-                className="mt-1"
-              />
-            </div>
-            <div className="w-[180px]">
-              <Label className="text-xs">Agent</Label>
-              <select
-                value={agentFilter}
-                onChange={(e) => setAgentFilter(e.target.value)}
-                className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-              >
-                <option value="">All agents</option>
-                {agents.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
-              <input
-                type="checkbox"
-                checked={semantic}
-                onChange={(e) => setSemantic(e.target.checked)}
-                className="rounded border-input"
-              />
-              Semantic search
-            </label>
-            <Button onClick={runSearch} disabled={searching}>
-              <SearchIcon className="size-4 mr-1" />
-              {searching ? "Searching…" : "Search"}
-            </Button>
-          </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-        </CardContent>
-      </Card>
+      <Sheet open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <SheetContent side="right" className="w-[420px] sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>Details</SheetTitle>
+            <SheetDescription>
+              {selectedNode ? `${selectedNode.type} • ${selectedNodeLabel}` : "Select a node to see details."}
+            </SheetDescription>
+          </SheetHeader>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Add memory</CardTitle>
-          <CardDescription>Store a fact for an agent. Agents with the memory skill can also write memories via tools.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid gap-2 sm:grid-cols-2">
-            <div>
-              <Label className="text-xs">Agent</Label>
-              <select
-                value={addAgentId}
-                onChange={(e) => setAddAgentId(e.target.value)}
-                className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-              >
-                <option value="">Select agent</option>
-                {agents.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="sm:col-span-2">
-              <Label className="text-xs">Text</Label>
-              <Input
-                placeholder="e.g. User prefers dark mode"
-                value={addText}
-                onChange={(e) => setAddText(e.target.value)}
-                className="mt-1"
-              />
-            </div>
-          </div>
-          {addError && <p className="text-sm text-destructive">{addError}</p>}
-          {addSuccess && <p className="text-sm text-green-600">Memory saved.</p>}
-          <Button onClick={handleAddMemory} disabled={addSaving || !addAgentId.trim() || !addText.trim()}>
-            <PlusIcon className="size-4 mr-1" />
-            {addSaving ? "Saving…" : "Add memory"}
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Results</CardTitle>
-          <CardDescription>{results.length} memor{results.length === 1 ? "y" : "ies"}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {results.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Run a search or leave query empty and click Search to list memories.</p>
-          ) : (
-            <ul className="space-y-3">
-              {results.map((m) => (
-                <li
-                  key={m.id}
-                  className="rounded-lg border bg-card p-3 text-sm flex items-start justify-between gap-2"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium text-muted-foreground text-xs">
-                      {agents.find((a) => a.id === m.agent_id)?.name ?? m.agent_id}
-                      {m.user_id ? ` · user ${m.user_id}` : ""}
-                      {" · "}
-                      {formatDate(m.created_at)}
-                    </p>
-                    <p className="mt-1">{m.text}</p>
+          <div className="px-4 pb-4 space-y-4 overflow-auto">
+            {!selectedNode ? (
+              <div className="text-sm text-muted-foreground">No selection.</div>
+            ) : (
+              <>
+                <div className="space-y-2 text-sm">
+                  <div className="flex gap-2">
+                    <div className="w-24 text-muted-foreground">Type</div>
+                    <div className="font-medium">{selectedNode.type}</div>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="shrink-0 h-8 w-8 text-muted-foreground hover:text-destructive"
-                    onClick={() => handleDelete(m.id)}
-                    disabled={deletingId === m.id}
-                    title="Delete memory"
-                  >
-                    <Trash2Icon className="size-4" />
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+                  <div className="flex gap-2">
+                    <div className="w-24 text-muted-foreground">ID</div>
+                    <div className="font-mono text-xs break-all">{selectedNode.id}</div>
+                  </div>
+                  {selectedNode.type === "agent" && (
+                    <div className="flex gap-2">
+                      <div className="w-24 text-muted-foreground">Agent</div>
+                      <div className="font-medium">{selectedNodeLabel}</div>
+                    </div>
+                  )}
+                  {selectedNode.type === "tag" && (
+                    <div className="flex gap-2">
+                      <div className="w-24 text-muted-foreground">Tag</div>
+                      <div className="font-medium">{selectedNodeLabel}</div>
+                    </div>
+                  )}
+                  {selectedNode.type === "memory" && (
+                    <>
+                      <div className="flex gap-2">
+                        <div className="w-24 text-muted-foreground">Text</div>
+                        <div className="break-words">{String((selectedNode as any).text ?? selectedNodeLabel)}</div>
+                      </div>
+                      {typeof (selectedNode as any).created_at === "string" && (
+                        <div className="flex gap-2">
+                          <div className="w-24 text-muted-foreground">Created</div>
+                          <div className="font-mono text-xs">{String((selectedNode as any).created_at)}</div>
+                        </div>
+                      )}
+                      {(selectedNode as any).user_id && (
+                        <div className="flex gap-2">
+                          <div className="w-24 text-muted-foreground">User</div>
+                          <div className="font-mono text-xs break-all">{String((selectedNode as any).user_id)}</div>
+                        </div>
+                      )}
+                      {(selectedNode as any).scope && (
+                        <div className="flex gap-2">
+                          <div className="w-24 text-muted-foreground">Scope</div>
+                          <div className="font-medium">{String((selectedNode as any).scope)}</div>
+                        </div>
+                      )}
+                      {(selectedNode as any).tags && (
+                        <div className="flex gap-2">
+                          <div className="w-24 text-muted-foreground">Tags</div>
+                          <div className="font-mono text-xs break-all">{String((selectedNode as any).tags)}</div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <div className="text-sm font-medium">Connections</div>
+                  <div className="text-sm text-muted-foreground">
+                    {selectedConnected.incoming.length} incoming • {selectedConnected.outgoing.length} outgoing
+                  </div>
+                  <div className="space-y-1">
+                    {selectedConnected.outgoing.slice(0, 10).map((id) => (
+                      <button
+                        key={`out:${id}`}
+                        type="button"
+                        className="w-full text-left text-sm rounded-md border px-2 py-1 hover:bg-muted"
+                        onClick={() => setSelectedNodeId(id)}
+                      >
+                        → {id}
+                      </button>
+                    ))}
+                    {selectedConnected.incoming.slice(0, 10).map((id) => (
+                      <button
+                        key={`in:${id}`}
+                        type="button"
+                        className="w-full text-left text-sm rounded-md border px-2 py-1 hover:bg-muted"
+                        onClick={() => setSelectedNodeId(id)}
+                      >
+                        ← {id}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

@@ -222,6 +222,25 @@ export interface ConversationSummary {
   created_at: string;
 }
 
+export interface MemoryGraphNode {
+  id: string;
+  type: "agent" | "memory" | "tag" | (string & {});
+  label?: string;
+  agent_id?: string;
+  memory_id?: number;
+  user_id?: string | null;
+  scope?: string;
+  text?: string;
+  created_at?: string;
+}
+
+export interface MemoryGraphEdge {
+  id: string;
+  from: string;
+  to: string;
+  type?: string;
+}
+
 export const api = {
   async getAgents(): Promise<{ agents: AgentSummary[] }> {
     return fetchJson("/api/agents");
@@ -886,6 +905,21 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ conversation_id }),
     });
+  },
+
+  async getMemoryGraph(params: {
+    q?: string;
+    agent_id?: string;
+    user_id?: string;
+    limit?: number;
+  }): Promise<{ nodes: MemoryGraphNode[]; edges: MemoryGraphEdge[] }> {
+    const sp = new URLSearchParams();
+    if (params.q) sp.set("q", params.q);
+    if (params.agent_id) sp.set("agent_id", params.agent_id);
+    if (params.user_id) sp.set("user_id", params.user_id);
+    if (params.limit != null) sp.set("limit", String(params.limit));
+    const query = sp.toString();
+    return fetchJson(`/api/memory/graph${query ? `?${query}` : ""}`);
   },
 };
 

@@ -4,11 +4,13 @@ Lightweight **Bun-based Agent Operating System** — micro-agents, installable s
 
 ## Showcase
 
-| Dashboard | Chat | Graphs |
-| --------- | ---- | ------ |
-| ![Dashboard](docs/media/Screenshot%202026-03-17%20at%2012.23.37%20AM.png) | ![Chat](docs/media/Screenshot%202026-03-17%20at%2012.24.06%20AM.png) | ![Graphs](docs/media/Screenshot%202026-03-17%20at%2012.26.11%20AM.png) |
-| **Skills** | **Schedules** | **Memory** |
-| ![Skills](docs/media/Screenshot%202026-03-17%20at%2012.26.51%20AM.png) | ![Schedules](docs/media/Screenshot%202026-03-17%20at%2012.27.00%20AM.png) | ![Memory](docs/media/Screenshot%202026-03-17%20at%2012.45.30%20AM.png) |
+| Agents | Skills | Schedules |
+| ------ | ------ | --------- |
+| ![Agents](docs/media/agents.png) | ![Skills](docs/media/skill.png) | ![Schedules](docs/media/schedule.png) |
+| Graphs | Graph agent | Graphs (chat) |
+| ![Graphs](docs/media/graphs.png) | ![Graph agent](docs/media/graph_agent.png) | ![Graphs chat](docs/media/graphs_chat.png) |
+| Agent chat | Agent (social media) |  |
+| ![Agent chat](docs/media/agent_chat.png) | ![Agent social media](docs/media/agent_social_media.png) |  |
 
 ## How lightweight is Sulala?
 

@@ -111,6 +111,33 @@ export function MemoryPage() {
     if (activeTab === "graph" && graphNodes.length === 0 && !graphLoading) loadGraph();
   }, [activeTab]);
 
+  useEffect(() => {
+    if (activeTab !== "graph" || graphNodes.length === 0 || (graphSize.w > 0 && graphSize.h > 0)) return;
+    const el = graphWrapRef.current;
+    if (!el) return;
+    let rafId = 0;
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 10;
+    const measure = () => {
+      if (cancelled || attempts >= maxAttempts) return;
+      attempts += 1;
+      const rect = el.getBoundingClientRect();
+      const w = Math.max(0, Math.floor(rect.width));
+      const h = Math.max(0, Math.floor(rect.height));
+      if (w > 0 && h > 0) {
+        setGraphSize({ w, h });
+        return;
+      }
+      rafId = requestAnimationFrame(measure);
+    };
+    rafId = requestAnimationFrame(measure);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(rafId);
+    };
+  }, [activeTab, graphNodes.length, graphSize.w, graphSize.h]);
+
   function runSearch() {
     if (activeTab === "graph") {
       loadGraph();
@@ -186,10 +213,19 @@ export function MemoryPage() {
       setGraphSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
     };
     update();
+    if (activeTab === "graph") {
+      const raf = requestAnimationFrame(() => update());
+      const ro = new ResizeObserver(() => update());
+      ro.observe(el);
+      return () => {
+        cancelAnimationFrame(raf);
+        ro.disconnect();
+      };
+    }
     const ro = new ResizeObserver(() => update());
     ro.observe(el);
     return () => ro.disconnect();
-  }, [activeTab]);
+  }, [activeTab, graphNodes.length]);
 
   if (loading) return <div className="p-4 text-muted-foreground">Loading…</div>;
 
@@ -203,12 +239,12 @@ export function MemoryPage() {
             "[mask-image:radial-gradient(ellipse_90%_90%_at_50%_50%,white,transparent_70%)]"
           )}
         />
-        {/* Graph container always mounted so ref + ResizeObserver get valid size; hidden when List tab */}
+        {/* Graph container always mounted so ref + ResizeObserver get valid size; hidden when List tab via opacity only (no invisible) so size stays non-zero */}
         <div
           ref={graphWrapRef}
           className={cn(
             "absolute inset-0 h-full w-full min-h-[400px]",
-            activeTab !== "graph" && "pointer-events-none invisible"
+            activeTab !== "graph" && "pointer-events-none"
           )}
           style={{
             opacity: activeTab === "graph" && graphNodes.length > 0 && !graphLoading ? 0.9 : 0,

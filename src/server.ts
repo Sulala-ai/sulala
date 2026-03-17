@@ -19,7 +19,7 @@
 import type { BunRequest } from "bun";
 import { MemoryStore } from "./db/memory-store.js";
 import { jsonResponse, CORS_HEADERS, errorMessage } from "./http/utils.js";
-import { handleMemoryWrite, handleMemorySearch, handleMemoryDelete } from "./http/memory.js";
+import { handleMemoryWrite, handleMemorySearch, handleMemoryDelete, handleMemoryGraph } from "./http/memory.js";
 import {
   handleConversations,
   handleConversationSummarize,
@@ -448,6 +448,10 @@ function createRoutes(): Record<string, unknown> {
     "/api/memory/search": {
       GET: (req: Request) =>
         handleMemorySearch(req, new URL(req.url), memoryStore),
+    },
+    "/api/memory/graph": {
+      GET: (req: Request) =>
+        handleMemoryGraph(req, new URL(req.url), memoryStore),
     },
     "/api/memory/:id": {
       DELETE: (req: BunRequest<"/api/memory/:id">) =>

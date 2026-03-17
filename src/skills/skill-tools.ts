@@ -6,7 +6,7 @@ import { join } from "node:path";
 import type { SkillFile } from "./skill-doc.js";
 import type { Tool } from "../core/tool-registry.js";
 import { errorMessage } from "../core/error.js";
-import { getSkillsDir } from "../core/config.js";
+import { getSkillsDir, getDashboardSecretFromConfig } from "../core/config.js";
 
 const DEBUG_SKILLS =
   (process.env.AGENT_OS_DEBUG ?? "").trim() === "1" ||
@@ -70,9 +70,30 @@ export function httpToolFromDescriptor(
       for (const [k, v] of Object.entries(query)) {
         if (v !== undefined && v !== null) urlObj.searchParams.set(k, String(v));
       }
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+
+      // When calling the local Agent OS API (default 127.0.0.1:3010 or HOST/PORT),
+      // include the dashboard gateway token so protected routes (e.g. /api/memory/write)
+      // can be used from tools. External skills that point at other bases are unaffected.
+      try {
+        const localHost = process.env.HOST || "127.0.0.1";
+        const localPort = process.env.PORT || "3010";
+        const isLocalApi =
+          (urlObj.hostname === localHost || urlObj.hostname === "0.0.0.0" || urlObj.hostname === "localhost") &&
+          (urlObj.port === localPort || (!urlObj.port && localPort === "3010"));
+        if (isLocalApi) {
+          const secret = await getDashboardSecretFromConfig();
+          if (secret) {
+            headers.Authorization = `Bearer ${secret}`;
+          }
+        }
+      } catch {
+        // If anything goes wrong here, fall back to unauthenticated call.
+      }
+
       const res = await fetch(urlObj.toString(), {
         method,
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: method === "GET" || method === "HEAD" ? undefined : JSON.stringify(body ?? {}),
       });
       const text = await res.text();

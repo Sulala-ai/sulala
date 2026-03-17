@@ -9,8 +9,8 @@ Lightweight **Bun-based Agent Operating System** — micro-agents, installable s
 | ![Agents](docs/media/agents.png) | ![Skills](docs/media/skill.png) | ![Schedules](docs/media/schedule.png) |
 | Graphs | Graph agent | Graphs (chat) |
 | ![Graphs](docs/media/graphs.png) | ![Graph agent](docs/media/graph_agent.png) | ![Graphs chat](docs/media/graphs_chat.png) |
-| Agent chat | Agent (social media) |  |
-| ![Agent chat](docs/media/agent_chat.png) | ![Agent social media](docs/media/agent_social_media.png) |  |
+| Agent chat | Agent (social media) | Memory |
+| ![Agent chat](docs/media/agent_chat.png) | ![Agent social media](docs/media/agent_social_media.png) | ![Memory](docs/media/memory.png) |
 
 ## How lightweight is Sulala?
 

@@ -19,6 +19,7 @@
     "cli": "bun run src/cli.ts",
     "sulala": "bun run src/cli.ts",
     "setup": "mkdir -p ~/.agent-os/agents && cp examples/echo-agent.json ~/.agent-os/agents/",
+    "seed:memory": "bun run scripts/seed-fake-memory.ts",
     "prepublishOnly": "bun run build && (cd dashboard && npm install && VITE_AGENT_OS_API= npm run build) && node -e \"require('fs').cpSync('dashboard/dist','dashboard-dist',{recursive:true})\""
   },
   "files": [
@@ -46,6 +47,7 @@
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@sulala/agent-os": "^0.1.0",
     "node-cron": "^4.2.1",
+    "react-force-graph-2d": "^1.25.2",
     "tweetnacl": "^1.0.3",
     "yaml": "^2.8.2",
     "zod": "3"

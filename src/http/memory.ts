@@ -126,3 +126,124 @@ export async function handleMemoryDelete(
   }
 }
 
+export async function handleMemoryGraph(
+  req: Request,
+  url: URL,
+  store: MemoryStore
+): Promise<Response> {
+  if (req.method !== "GET") {
+    return jsonResponse({ error: "Method not allowed" }, 405);
+  }
+
+  const user_id = url.searchParams.get("user_id");
+  const agent_id = url.searchParams.get("agent_id");
+  const q = url.searchParams.get("q") ?? "";
+  const limitRaw = url.searchParams.get("limit");
+  const limit =
+    limitRaw && !Number.isNaN(Number(limitRaw)) && Number(limitRaw) > 0
+      ? Math.min(Number(limitRaw), 500)
+      : 200;
+
+  try {
+    const rows = store.searchMemories({
+      user_id,
+      agent_id,
+      q,
+      limit,
+    }) as Array<{
+      id: number;
+      user_id: string | null;
+      agent_id: string;
+      scope: string;
+      text: string;
+      tags: string | null;
+      created_at: string;
+    }>;
+
+    const nodes: Array<Record<string, unknown>> = [];
+    const edges: Array<Record<string, unknown>> = [];
+
+    const agentIds = new Set<string>();
+    const memoryIds = new Set<string>();
+    const tagIds = new Set<string>();
+
+    for (const row of rows) {
+      const agentKey = `agent:${row.agent_id}`;
+      if (!agentIds.has(agentKey)) {
+        agentIds.add(agentKey);
+        nodes.push({
+          id: agentKey,
+          type: "agent",
+          agent_id: row.agent_id,
+        });
+      }
+
+      const memoryKey = `memory:${row.id}`;
+      if (!memoryIds.has(memoryKey)) {
+        memoryIds.add(memoryKey);
+        nodes.push({
+          id: memoryKey,
+          type: "memory",
+          memory_id: row.id,
+          agent_id: row.agent_id,
+          user_id: row.user_id,
+          scope: row.scope,
+          label: row.text.slice(0, 120),
+          text: row.text,
+          created_at: row.created_at,
+        });
+        edges.push({
+          id: `agent-mem:${row.agent_id}:${row.id}`,
+          from: agentKey,
+          to: memoryKey,
+          type: "owns",
+        });
+      }
+
+      if (row.tags) {
+        try {
+          const parsed = JSON.parse(row.tags);
+          const tagArray: string[] =
+            typeof parsed === "string"
+              ? parsed
+                  .split(",")
+                  .map((t) => t.trim())
+                  .filter(Boolean)
+              : Array.isArray(parsed)
+              ? parsed
+                  .map((t) => (typeof t === "string" ? t.trim() : ""))
+                  .filter(Boolean)
+              : [];
+
+          for (const tag of tagArray) {
+            const safeTag = tag || "";
+            if (!safeTag) continue;
+            const tagKey = `tag:${safeTag}`;
+            if (!tagIds.has(tagKey)) {
+              tagIds.add(tagKey);
+              nodes.push({
+                id: tagKey,
+                type: "tag",
+                label: safeTag,
+              });
+            }
+            edges.push({
+              id: `mem-tag:${row.id}:${safeTag}`,
+              from: memoryKey,
+              to: tagKey,
+              type: "tagged",
+            });
+          }
+        } catch {
+          // ignore malformed tags
+        }
+      }
+    }
+
+    return jsonResponse({ nodes, edges });
+  } catch (err) {
+    const msg = errorMessage(err);
+    return jsonResponse({ error: msg }, 500);
+  }
+}
+

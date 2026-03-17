@@ -2,7 +2,7 @@
 name: file-search
 description: Search for files and text in the workspace or the user's computer (grep, find). Use when the user asks "find files containing X", "list all .md files", "search my computer", "find file named Y on my machine", "search in my Downloads".
 metadata:
-  clawdbot:
+  sulala:
     emoji: "🔍"
     requires:
       bins:

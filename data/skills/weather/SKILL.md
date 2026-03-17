@@ -3,7 +3,7 @@ name: weather
 description: Get current weather and forecasts (no API key required). Use when the user asks for weather, temperature, or forecast in a city or location.
 homepage: https://wttr.in/:help
 metadata:
-  clawdbot:
+  sulala:
     emoji: "🌤️"
     requires:
       bins:

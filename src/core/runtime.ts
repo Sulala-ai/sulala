@@ -22,6 +22,8 @@ export interface RunOptions {
   agent: AgentConfig;
   /** Prior turns (user/assistant only) to send as context. Last entry should be the preceding turn. */
   conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>;
+  /** Override agent's max_turns for this run (e.g. graph runner caps to reduce API usage). */
+  maxTurnsOverride?: number;
 }
 
 export interface ToolCallStep {
@@ -58,19 +60,49 @@ const MAX_HISTORY_TURNS = 20; // cap to avoid context overflow
 const SKILL_REQUIRED_MESSAGE =
   "This task requires a skill that this agent doesn't have. Install the skill from hub.sulala.ai (Dashboard → Skills → install from store), then add it to this agent in Edit agent.";
 
+/** True if the error is a rate limit (429) so we can retry. */
+function isRateLimitError(err: unknown): boolean {
+  const msg = errorMessage(err);
+  return msg.includes("429") || /rate_limit|rate limit/i.test(msg);
+}
+
 /** If the LLM error looks like rate limit (429), return a user-friendly message that suggests installing missing skills. */
 function formatLLMErrorForUser(err: unknown): string {
   const msg = errorMessage(err);
-  if (msg.includes("429") || /rate_limit|rate limit/i.test(msg)) {
+  if (isRateLimitError(err)) {
     return `Request limit reached. If this task requires a skill the agent doesn't have, install it from hub.sulala.ai and add it to this agent to avoid repeated attempts. Otherwise try again later.`;
   }
   return msg;
 }
 
+const RATE_LIMIT_RETRIES = 3;
+const RATE_LIMIT_BACKOFF_MS = [2000, 4000, 8000];
+
+/** Call LLM with retries on 429 (rate limit). Reduces "Request limit reached" failures for pipelines. */
+async function callLLMWithRetry(
+  options: Parameters<typeof callLLM>[0]
+): ReturnType<typeof callLLM> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= RATE_LIMIT_RETRIES; attempt++) {
+    try {
+      return await callLLM(options);
+    } catch (err) {
+      lastErr = err;
+      if (attempt < RATE_LIMIT_RETRIES && isRateLimitError(err)) {
+        const delay = RATE_LIMIT_BACKOFF_MS[attempt] ?? 8000;
+        await new Promise((r) => setTimeout(r, delay));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr;
+}
+
 function runAgentInner(options: RunOptions): Promise<RunResult> {
   return (async () => {
-  const { task, agent, conversationHistory = [] } = options;
-  const maxTurns = agent.limits?.max_turns ?? 10;
+  const { task, agent, conversationHistory = [], maxTurnsOverride } = options;
+  const maxTurns = maxTurnsOverride ?? agent.limits?.max_turns ?? 10;
   const maxTokens = agent.limits?.max_tokens;
 
   await ensureWorkspace(agent.id);
@@ -132,7 +164,7 @@ function runAgentInner(options: RunOptions): Promise<RunResult> {
   while (turns < maxTurns) {
     turns++;
     try {
-      const response = await callLLM({
+      const response = await callLLMWithRetry({
         model: agent.model,
         messages,
         tools,
@@ -301,7 +333,7 @@ function runAgentInner(options: RunOptions): Promise<RunResult> {
         ...messages,
         { role: "user" as const, content: "Summarize the tool results above in one short paragraph for the user. Reply only with the summary, no tool calls." },
       ];
-      const summaryResponse = await callLLM({
+      const summaryResponse = await callLLMWithRetry({
         model: agent.model,
         messages: summaryMessages,
         tools: undefined, // no tools so model must respond with text
@@ -352,8 +384,8 @@ export async function runAgent(options: RunOptions): Promise<RunResult> {
  * Run agent with streaming: calls onEvent for each assistant delta, tool_call, then done (or error).
  */
 export async function runAgentStream(options: RunOptions, onEvent: (ev: AgentStreamEvent) => void): Promise<void> {
-  const { task, agent, conversationHistory = [] } = options;
-  const maxTurns = agent.limits?.max_turns ?? 10;
+  const { task, agent, conversationHistory = [], maxTurnsOverride } = options;
+  const maxTurns = maxTurnsOverride ?? agent.limits?.max_turns ?? 10;
   const maxTokens = agent.limits?.max_tokens;
 
   await ensureWorkspace(agent.id);
@@ -613,7 +645,7 @@ function buildSystemPrompt(
   );
   if (delegateableAgents?.length) {
     parts.push(
-      "You have the run_agent tool. When the user asks for something that another agent can do (e.g. post to Bluesky, search the web, send email), use run_agent with that agent's id and the task. Then summarize the result for the user."
+      "You have the run_agent tool. When the user asks for something that another agent can do (e.g. post to Bluesky, search the web, send email), first tell the user in natural language that you are asking another agent to handle that part (for example: 'I’ll ask our Social Media Agent to post that on Bluesky for you.' or 'I’ll hand this off to our Research Agent to look that up.'). Then use run_agent with that agent's id and the task. After the other agent finishes, reply to the user with a short, friendly summary of what that agent did and the outcome (for example: 'The Social Media Agent has finished — your post \"hi\" is now live on Bluesky.')."
     );
     parts.push(
       "Available agents to delegate to (use run_agent with agent_id and task): " +

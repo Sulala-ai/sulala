@@ -2,7 +2,7 @@
 name: date
 description: Get current date and time (optionally in a timezone). Use when the user asks "what time is it", "current date", "time in Tokyo", "what's the date today".
 metadata:
-  clawdbot:
+  sulala:
     emoji: "🕐"
     requires:
       bins:

@@ -2,7 +2,7 @@
 name: qr-code
 description: Generate a QR code from URL or text (via qrencode or API). Use when the user says "generate a QR code for this URL", "QR code for …", "make a QR code".
 metadata:
-  clawdbot:
+  sulala:
     emoji: "📱"
     requires:
       bins:

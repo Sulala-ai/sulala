@@ -2,7 +2,7 @@
 name: fetch
 description: Fetch content from a URL (GET). Use when the user says "fetch this URL", "read that page", "get content from …", or "what's at this link".
 metadata:
-  clawdbot:
+  sulala:
     emoji: "🔗"
     requires:
       bins:

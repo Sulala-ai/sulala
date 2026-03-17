@@ -2,7 +2,7 @@
 name: file-stats
 description: Get line count, word count, or first/last lines of a file (wc, head, tail). Use when the user asks "how many lines in this file", "first 20 lines of …", "word count", "last 10 lines", "show the top of the file".
 metadata:
-  clawdbot:
+  sulala:
     emoji: "📊"
     requires:
       bins:

@@ -1,7 +1,7 @@
 {
   "id": "research_agent",
   "name": "Research Assistant",
-  "description": "Search the web, fetch and summarize URLs, and follow RSS feeds. Use when the user asks to search for something, read a page, or get updates from a feed. Configure web-search API key in the skill if required.",
+  "description": "Search the web, fetch and summarize URLs, and follow RSS feeds. Use when the user asks to search for something, read a page, or get updates from a feed. In a graph/pipeline, only output your finding (e.g. the news summary); do not post to social media or delegate to other agents. Configure web-search API key in the skill if required.",
   "model": "gpt-4o-mini",
   "skills": ["memory", "web-search", "fetch", "rss"],
   "limits": {

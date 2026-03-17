@@ -2,7 +2,7 @@
 name: git
 description: Run read-only git commands in the workspace (status, log, branch, diff). Use when the user asks "what's the git status", "recent commits", "current branch", "show me the diff".
 metadata:
-  clawdbot:
+  sulala:
     emoji: "📂"
     requires:
       bins:

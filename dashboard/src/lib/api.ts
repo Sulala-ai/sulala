@@ -122,7 +122,25 @@ async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
     headers: { "Content-Type": "application/json", ...authHeaders(), ...options?.headers },
   });
   checkUnauthorized(res);
-  if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+  if (!res.ok) {
+    const contentType = res.headers.get("content-type") ?? "";
+    if (contentType.includes("application/json")) {
+      try {
+        const data = (await res.json()) as unknown;
+        const msg =
+          typeof data === "object" && data !== null && "error" in data && typeof (data as { error?: unknown }).error === "string"
+            ? (data as { error: string }).error
+            : `API ${res.status}`;
+        const err = new Error(msg) as Error & { status?: number; data?: unknown };
+        err.status = res.status;
+        err.data = data;
+        throw err;
+      } catch {
+        // fallthrough to text
+      }
+    }
+    throw new Error(`API ${res.status}: ${await res.text()}`);
+  }
   return res.json() as Promise<T>;
 }
 
@@ -328,6 +346,7 @@ export const api = {
     options: {
       conversation_id?: string;
       attachment_paths?: string[];
+      signal?: AbortSignal;
       onDelta?: (delta: string) => void;
       onToolCall?: (name: string, result?: unknown, error?: string) => void;
       onDone?: (data: {
@@ -349,6 +368,7 @@ export const api = {
         conversation_id: options.conversation_id ?? undefined,
         attachment_paths: options.attachment_paths ?? undefined,
       }),
+      signal: options.signal,
     });
     checkUnauthorized(res);
     if (!res.ok) {
@@ -425,6 +445,10 @@ export const api = {
     if (params?.limit) sp.set("limit", String(params.limit));
     const q = sp.toString();
     return fetchJson(`/api/tasks${q ? `?${q}` : ""}`);
+  },
+
+  async getTaskById(id: string): Promise<{ task: TaskItem }> {
+    return fetchJson(`/api/tasks?id=${encodeURIComponent(id)}`);
   },
 
   async enqueueTask(agent_id: string, task: string): Promise<{ task: TaskItem }> {
@@ -684,6 +708,10 @@ export const api = {
     });
   },
 
+  async deleteGraph(id: string): Promise<{ ok: boolean }> {
+    return fetchJson(`/api/graphs/${encodeURIComponent(id)}`, { method: "DELETE" });
+  },
+
   async runGraph(graph_id: string, input: string): Promise<GraphRunResult> {
     return fetchJson("/api/graphs/run", {
       method: "POST",
@@ -698,6 +726,7 @@ export const api = {
     graph_id: string,
     input: string,
     options: {
+      signal?: AbortSignal;
       onNodeDone?: (data: { node_id: string; agent_id: string; success: boolean; output: string; error?: string }) => void;
       onDone?: (data: { success: boolean; output: string; node_results: GraphRunResult["node_results"] }) => void;
       onError?: (message: string) => void;
@@ -707,6 +736,7 @@ export const api = {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({ graph_id, input }),
+      signal: options.signal,
     });
     checkUnauthorized(res);
     if (!res.ok) {
@@ -863,6 +893,8 @@ export interface SkillSummary {
   id: string;
   name: string;
   description?: string;
+  /** Version from SKILL.md frontmatter. Used to compare with store for update. */
+  version?: string;
   tools: Array<{ id: string; description?: string }>;
   required_env?: string[];
   /** True when system-provided; user cannot uninstall. */
@@ -900,6 +932,8 @@ export interface InstallSkillPayload {
   url?: string;
   /** When installing from store Discover, pass the skill slug so the agent installs to skills/<slug>. */
   slug?: string;
+  /** Store version; agent writes it to .sulala-meta.json so "Update" comparison works. */
+  version?: string;
 }
 
 export interface GraphRunResult {
@@ -919,6 +953,9 @@ export interface GraphRunResult {
 export interface GraphNode {
   id: string;
   agent: string;
+  /** Optional position for editor layout (x, y in pixels). */
+  x?: number;
+  y?: number;
 }
 
 export interface GraphEdge {

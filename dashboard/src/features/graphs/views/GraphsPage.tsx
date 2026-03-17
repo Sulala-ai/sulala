@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { Trash2Icon, PlusIcon, ArrowRightIcon, PlayIcon, PencilIcon, X, CalendarIcon, Pause, Play, MoreVertical } from "lucide-react"
+import { Trash2Icon, PlusIcon, ArrowRightIcon, PlayIcon, PencilIcon, X, CalendarIcon, Pause, Play, MoreVertical, GripVertical } from "lucide-react"
 import { toast } from "sonner"
 import { useGraphChat } from "../contexts/graph-chat-context"
 import { Avatar, AvatarImage } from "@/components/ui/avatar"
@@ -16,6 +16,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 const EMPTY_GRAPH: Graph = { id: "", nodes: [], edges: [] }
 
@@ -87,16 +88,32 @@ export function GraphsPage() {
       return
     }
     setEditorError(null)
-    api.getGraph(editGraphId).then(setEditGraph).catch(() => {
+    api.getGraph(editGraphId).then((g) => {
+      const nodes = g.nodes.map((n, i) => {
+        if (n.x != null && n.y != null) return n
+        return {
+          ...n,
+          x: 24 + (i % 4) * 220,
+          y: 24 + Math.floor(i / 4) * 140,
+        }
+      })
+      setEditGraph({ ...g, nodes })
+    }).catch(() => {
       setEditorError("Failed to load graph")
       setEditGraph(EMPTY_GRAPH)
     })
   }, [editGraphId])
 
+  const [draggingNodeIndex, setDraggingNodeIndex] = useState<number | null>(null)
+  const [dragStart, setDragStart] = useState<{ clientX: number; clientY: number; nodeX: number; nodeY: number } | null>(null)
+
   function addNode() {
     const id = `node_${editGraph.nodes.length + 1}`
     const agent = agents[0]?.id ?? ""
-    setEditGraph((g) => ({ ...g, nodes: [...g.nodes, { id, agent }] }))
+    const count = editGraph.nodes.length
+    const x = 24 + (count % 4) * 220
+    const y = 24 + Math.floor(count / 4) * 140
+    setEditGraph((g) => ({ ...g, nodes: [...g.nodes, { id, agent, x, y }] }))
   }
 
   function removeNode(nodeId: string) {
@@ -130,6 +147,38 @@ export function GraphsPage() {
       edges: g.edges.map((e, j) => (j === i ? { ...e, ...patch } : e)),
     }))
   }
+
+  function getNodePosition(n: GraphNode, i: number) {
+    const x = n.x ?? 24 + (i % 4) * 220
+    const y = n.y ?? 24 + Math.floor(i / 4) * 140
+    return { x, y }
+  }
+
+  useEffect(() => {
+    if (draggingNodeIndex === null || !dragStart) return
+    const onMove = (e: PointerEvent) => {
+      const dx = e.clientX - dragStart.clientX
+      const dy = e.clientY - dragStart.clientY
+      setEditGraph((g) => ({
+        ...g,
+        nodes: g.nodes.map((n, j) =>
+          j === draggingNodeIndex ? { ...n, x: dragStart.nodeX + dx, y: dragStart.nodeY + dy } : n
+        ),
+      }))
+    }
+    const onUp = () => {
+      setDraggingNodeIndex(null)
+      setDragStart(null)
+    }
+    window.addEventListener("pointermove", onMove, { passive: true })
+    window.addEventListener("pointerup", onUp)
+    window.addEventListener("pointercancel", onUp)
+    return () => {
+      window.removeEventListener("pointermove", onMove)
+      window.removeEventListener("pointerup", onUp)
+      window.removeEventListener("pointercancel", onUp)
+    }
+  }, [draggingNodeIndex, dragStart])
 
   async function handleSave() {
     const id = (editGraphId || newGraphId.trim()).trim()
@@ -195,6 +244,9 @@ export function GraphsPage() {
           <p className="text-muted-foreground">Run workflows or edit graphs: add agent nodes, connect them, then run.</p>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             A graph is a pipeline of agents: each <strong>node</strong> is an agent; <strong>edges</strong> define the order (from → to). You provide one input; it is passed to the first node(s) with no incoming edges. Each node runs and its output can feed the next. The final output is from the last node in the chain.
+          </p>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            <strong>Tip:</strong> Use at least different AI providers for different agents in a graph for better performance and to avoid API rate limits, since graphs make many calls.
           </p>
         </div>
         <Button onClick={openNewGraphModal}>
@@ -319,6 +371,33 @@ export function GraphsPage() {
                             {runNowId === g.id ? "Queuing…" : "Run now"}
                           </DropdownMenuItem>
                         )}
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onClick={async () => {
+                            if (!confirm(`Delete graph "${g.id}"? This cannot be undone.`)) return
+                            try {
+                              await api.deleteGraph(g.id)
+                              if (editGraphId === g.id) {
+                                setShowEditorModal(false)
+                                setEditGraphId("")
+                                setEditGraph(EMPTY_GRAPH)
+                              }
+                              setGraphDetails((prev) => {
+                                const next = { ...prev }
+                                delete next[g.id]
+                                return next
+                              })
+                              refetchGraphs()
+                              toast.success("Graph deleted")
+                            } catch (e) {
+                              toast.error(e instanceof Error ? e.message : String(e))
+                            }
+                          }}
+                        >
+                          <Trash2Icon className="mr-2 size-4" />
+                          Delete graph
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
@@ -352,169 +431,248 @@ export function GraphsPage() {
       )}
 
       {showEditorModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50" onClick={() => setShowEditorModal(false)} aria-hidden />
-          <div className="relative z-10 max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg border bg-background p-4 shadow-lg">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold">{editGraphId ? "Edit graph" : "New graph"}</h2>
-              <Button variant="ghost" size="icon" onClick={() => setShowEditorModal(false)} aria-label="Close">
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-end gap-2">
-                <div className="space-y-1">
-                  <Label>Open graph</Label>
-                  <select
-                    className="flex h-9 min-w-[160px] rounded-lg border border-input bg-transparent px-3 py-1 text-sm"
-                    value={editGraphId}
-                    onChange={(e) => setEditGraphId(e.target.value)}
-                  >
-                    <option value="">New graph…</option>
+          <div className="relative z-10 flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border bg-background shadow-xl">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
+              <h2 className="text-xl font-semibold tracking-tight">{editGraphId ? "Edit graph" : "New graph"}</h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <Select
+                  value={editGraphId || "__new__"}
+                  onValueChange={(v) => setEditGraphId(v === "__new__" ? "" : v)}
+                >
+                  <SelectTrigger className="h-10 min-w-[200px] text-sm">
+                    <SelectValue placeholder="Select graph…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__new__">New graph…</SelectItem>
                     {graphs.map((g) => (
-                      <option key={g.id} value={g.id}>{g.id}</option>
+                      <SelectItem key={g.id} value={g.id}>{g.id}</SelectItem>
                     ))}
-                  </select>
-                </div>
+                  </SelectContent>
+                </Select>
                 {!editGraphId && (
-                  <div className="space-y-1">
-                    <Label htmlFor="new-graph-id">New graph ID</Label>
-                    <Input
-                      id="new-graph-id"
-                      placeholder="e.g. my_pipeline"
-                      value={newGraphId}
-                      onChange={(e) => setNewGraphId(e.target.value)}
-                      className="w-40"
-                    />
-                  </div>
+                  <Input
+                    placeholder="Graph ID (e.g. my_pipeline)"
+                    value={newGraphId}
+                    onChange={(e) => setNewGraphId(e.target.value)}
+                    className="h-10 w-48 text-sm"
+                  />
                 )}
-                <Button type="button" variant="outline" size="sm" onClick={startNewGraph}>
+                <Button type="button" variant="outline" size="default" className="h-10" onClick={startNewGraph}>
                   New graph
                 </Button>
-                <Button type="button" size="sm" onClick={handleSave} disabled={!editGraph.nodes.length}>
+                <Button
+                  type="button"
+                  size="default"
+                  className="h-10"
+                  onClick={handleSave}
+                  disabled={!editGraph.nodes.length}
+                >
                   Save
                 </Button>
                 {editGraphId && (
                   <Button
                     type="button"
                     variant="outline"
-                    size="sm"
+                    size="default"
+                    className="h-10"
                     onClick={() => { setShowEditorModal(false); openRunForGraph(editGraphId) }}
                   >
-                    <PlayIcon className="mr-1 size-3" />
-                    Run this graph
+                    <PlayIcon className="mr-1.5 size-4" />
+                    Run
                   </Button>
                 )}
+                <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0" onClick={() => setShowEditorModal(false)} aria-label="Close">
+                  <X className="size-5" />
+                </Button>
               </div>
-              {editorError && <p className="text-sm text-destructive">{editorError}</p>}
-
-              <div className="grid gap-6 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label>Nodes</Label>
-                    <Button type="button" variant="outline" size="sm" onClick={addNode}>
-                      <PlusIcon className="mr-1 size-3" /> Add
+            </div>
+            {editorError && (
+              <div className="shrink-0 border-b border-destructive/20 bg-destructive/10 px-5 py-2 text-sm text-destructive">
+                {editorError}
+              </div>
+            )}
+            <div className="min-h-0 flex-1 overflow-y-auto p-5">
+              <div className="space-y-6">
+                <section>
+                  <div className="mb-3 flex items-center justify-between">
+                    <Label className="text-sm font-medium">Graph canvas</Label>
+                    <Button type="button" variant="outline" size="default" className="h-9" onClick={addNode}>
+                      <PlusIcon className="mr-2 size-4" />
+                      Add node
                     </Button>
                   </div>
-                  <ul className="space-y-2">
-                    {editGraph.nodes.map((n, i) => (
-                      <li key={n.id} className="flex items-center gap-2 rounded-lg border p-2">
-                        <Input
-                          placeholder="Node id"
-                          value={n.id}
-                          onChange={(e) => updateNode(i, { id: e.target.value })}
-                          className="h-8 font-mono text-xs"
-                        />
-                        <select
-                          className="h-8 min-w-[100px] rounded border border-input bg-transparent px-2 text-xs"
-                          value={n.agent}
-                          onChange={(e) => updateNode(i, { agent: e.target.value })}
+                  <div
+                    className="relative min-h-[380px] rounded-xl border bg-muted/20"
+                    style={{ minWidth: "100%" }}
+                  >
+                    {editGraph.nodes.map((n, i) => {
+                      const { x, y } = getNodePosition(n, i)
+                      const isDragging = draggingNodeIndex === i
+                      return (
+                        <div
+                          key={n.id}
+                          className="absolute flex w-56 flex-col rounded-lg border bg-background shadow-sm"
+                          style={{
+                            left: x,
+                            top: y,
+                            zIndex: isDragging ? 50 : 10,
+                          }}
                         >
-                          {agents.map((a) => (
-                            <option key={a.id} value={a.id}>{a.name}</option>
-                          ))}
-                        </select>
-                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => removeNode(n.id)}>
-                          <Trash2Icon className="size-4" />
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                          <div
+                            className="flex cursor-grab items-center gap-2 border-b bg-muted/30 px-3 py-2 rounded-t-lg active:cursor-grabbing"
+                            onPointerDown={(e) => {
+                              if (e.button !== 0) return
+                              const pos = getNodePosition(n, i)
+                              setDraggingNodeIndex(i)
+                              setDragStart({
+                                clientX: e.clientX,
+                                clientY: e.clientY,
+                                nodeX: pos.x,
+                                nodeY: pos.y,
+                              })
+                              ;(e.target as HTMLElement).setPointerCapture?.(e.pointerId)
+                            }}
+                          >
+                            <GripVertical className="size-4 shrink-0 text-muted-foreground" />
+                            <span className="truncate text-xs font-medium text-muted-foreground">Node</span>
+                          </div>
+                          <div className="flex flex-col gap-2 p-3">
+                            <div className="space-y-1">
+                              <Label className="text-xs">ID</Label>
+                              <Input
+                                placeholder="Node id"
+                                value={n.id}
+                                onChange={(e) => updateNode(i, { id: e.target.value })}
+                                className="h-9 font-mono text-sm"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Agent</Label>
+                              <Select value={n.agent} onValueChange={(v) => updateNode(i, { agent: v })}>
+                                <SelectTrigger className="h-9 w-full text-sm">
+                                  <SelectValue placeholder="Agent" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {agents.map((a) => (
+                                    <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-full justify-start text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              onClick={() => removeNode(n.id)}
+                            >
+                              <Trash2Icon className="mr-2 size-4" />
+                              Remove node
+                            </Button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">Drag nodes by the top bar to reposition them.</p>
+                </section>
 
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label>Edges (from → to)</Label>
-                    <Button type="button" variant="outline" size="sm" onClick={addEdge} disabled={editGraph.nodes.length < 2}>
-                      <PlusIcon className="mr-1 size-3" /> Add
+                <section className="rounded-lg border bg-muted/10 p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <Label className="text-sm font-medium">Edges (from → to)</Label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="default"
+                      className="h-9"
+                      onClick={addEdge}
+                      disabled={editGraph.nodes.length < 2}
+                    >
+                      <PlusIcon className="mr-2 size-4" />
+                      Add edge
                     </Button>
                   </div>
-                  <ul className="space-y-2">
+                  <ul className="space-y-3">
                     {editGraph.edges.map((e, i) => (
-                      <li key={i} className="flex items-center gap-2 rounded-lg border p-2">
-                        <select
-                          className="h-8 flex-1 rounded border border-input bg-transparent px-2 text-xs"
-                          value={e.from}
-                          onChange={(ev) => updateEdge(i, { from: ev.target.value })}
+                      <li key={i} className="flex items-center gap-3 rounded-lg border bg-background p-3">
+                        <Select value={e.from} onValueChange={(v) => updateEdge(i, { from: v })}>
+                          <SelectTrigger className="h-10 min-w-[140px] text-sm">
+                            <SelectValue placeholder="From" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {editGraph.nodes.map((node) => (
+                              <SelectItem key={node.id} value={node.id}>{node.id}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <ArrowRightIcon className="size-5 shrink-0 text-muted-foreground" />
+                        <Select value={e.to} onValueChange={(v) => updateEdge(i, { to: v })}>
+                          <SelectTrigger className="h-10 min-w-[140px] text-sm">
+                            <SelectValue placeholder="To" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {editGraph.nodes.map((node) => (
+                              <SelectItem key={node.id} value={node.id}>{node.id}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-10 w-10 shrink-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => removeEdge(i)}
+                          aria-label="Remove edge"
                         >
-                          {editGraph.nodes.map((n) => (
-                            <option key={n.id} value={n.id}>{n.id}</option>
-                          ))}
-                        </select>
-                        <ArrowRightIcon className="size-4 shrink-0 text-muted-foreground" />
-                        <select
-                          className="h-8 flex-1 rounded border border-input bg-transparent px-2 text-xs"
-                          value={e.to}
-                          onChange={(ev) => updateEdge(i, { to: ev.target.value })}
-                        >
-                          {editGraph.nodes.map((n) => (
-                            <option key={n.id} value={n.id}>{n.id}</option>
-                          ))}
-                        </select>
-                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => removeEdge(i)}>
                           <Trash2Icon className="size-4" />
                         </Button>
                       </li>
                     ))}
                   </ul>
-                </div>
-              </div>
+                </section>
 
-              <div className="grid gap-2 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <Label className="text-xs">Schedule (cron, optional)</Label>
-                  <Input
-                    placeholder="e.g. 0 9 * * *"
-                    value={editGraph.schedule ?? ""}
-                    onChange={(e) => setEditGraph((g) => ({ ...g, schedule: e.target.value || undefined }))}
-                    className="font-mono text-xs"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Scheduled task (optional)</Label>
-                  <Input
-                    placeholder="Task when schedule runs"
-                    value={editGraph.schedule_input ?? ""}
-                    onChange={(e) => setEditGraph((g) => ({ ...g, schedule_input: e.target.value || undefined }))}
-                    className="text-xs"
-                  />
-                </div>
-              </div>
-
-              {editGraph.nodes.length > 0 && (
-                <div className="rounded-lg border bg-muted/30 p-3">
-                  <div className="mb-2 text-xs font-medium text-muted-foreground">Preview</div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {editGraph.nodes.map((n, i) => (
-                      <span key={n.id}>
-                        <span className="rounded bg-primary/10 px-2 py-0.5 font-mono text-xs">{n.id}</span>
-                        <span className="text-muted-foreground text-xs">({agents.find((a) => a.id === n.agent)?.name ?? n.agent})</span>
-                        {i < editGraph.nodes.length - 1 && <ArrowRightIcon className="inline size-3 text-muted-foreground" />}
-                      </span>
-                    ))}
+                <section className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Schedule (cron, optional)</Label>
+                    <Input
+                      placeholder="e.g. 0 9 * * *"
+                      value={editGraph.schedule ?? ""}
+                      onChange={(e) => setEditGraph((g) => ({ ...g, schedule: e.target.value || undefined }))}
+                      className="h-10 font-mono text-sm"
+                    />
                   </div>
-                </div>
-              )}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Scheduled input (optional)</Label>
+                    <Input
+                      placeholder="Task when schedule runs"
+                      value={editGraph.schedule_input ?? ""}
+                      onChange={(e) => setEditGraph((g) => ({ ...g, schedule_input: e.target.value || undefined }))}
+                      className="h-10 text-sm"
+                    />
+                  </div>
+                </section>
+
+                {editGraph.nodes.length > 0 && (
+                  <div className="rounded-lg border bg-muted/20 p-4">
+                    <div className="mb-2 text-sm font-medium text-muted-foreground">Flow preview</div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {editGraph.nodes.map((n, i) => (
+                        <span key={n.id} className="flex items-center gap-1.5">
+                          <span className="rounded-md bg-primary/15 px-2.5 py-1 font-mono text-sm">{n.id}</span>
+                          <span className="text-muted-foreground text-sm">
+                            ({agents.find((a) => a.id === n.agent)?.name ?? n.agent})
+                          </span>
+                          {i < editGraph.nodes.length - 1 && (
+                            <ArrowRightIcon className="size-4 text-muted-foreground" />
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

@@ -2,7 +2,7 @@
 name: markdown-to-html
 description: Convert Markdown to HTML (via pandoc or a simple converter). Use when the user says "convert this markdown to HTML", "render this .md as HTML", "markdown to HTML".
 metadata:
-  clawdbot:
+  sulala:
     emoji: "📝"
     requires:
       bins:

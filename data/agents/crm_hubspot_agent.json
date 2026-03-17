@@ -1,0 +1,11 @@
+{
+  "id": "crm_hubspot_agent",
+  "name": "HubSpot CRM Agent",
+  "description": "Updates HubSpot from pipeline output: creates and updates contacts and deals using the crm-hubspot skill. Use as the last node in a sales graph to sync follow-up and lead status to HubSpot. Configure HUBSPOT_ACCESS_TOKEN in Skills → crm-hubspot.",
+  "model": "gpt-4o-mini",
+  "skills": ["memory", "crm-hubspot"],
+  "personality": "Concise and factual. Parse the input, call the crm-hubspot scripts via exec with skill_id 'crm-hubspot', then return only a short summary of what was created or updated in HubSpot.",
+  "limits": {
+    "max_turns": 15
+  }
+}

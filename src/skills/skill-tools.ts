@@ -8,6 +8,15 @@ import type { Tool } from "../core/tool-registry.js";
 import { errorMessage } from "../core/error.js";
 import { getSkillsDir } from "../core/config.js";
 
+const DEBUG_SKILLS =
+  (process.env.AGENT_OS_DEBUG ?? "").trim() === "1" ||
+  (process.env.AGENT_OS_DEBUG_SKILLS ?? "").trim() === "1";
+
+function skillDebug(msg: string): void {
+  if (!DEBUG_SKILLS) return;
+  console.log(msg);
+}
+
 export function getSkillBaseUrl(): string {
   const env = process.env.AGENT_OS_SKILL_BASE_URL?.trim();
   if (env) return env.replace(/\/$/, "");
@@ -133,14 +142,14 @@ export function createDocOnlyRequestTool(
         }
       }
       const finalUrl = urlObj.toString();
-      console.log(`[skill:${skillId}] ${method} ${finalUrl} (auth: ${token ? "yes" : "no"})`);
+      skillDebug(`[skill:${skillId}] ${method} ${finalUrl} (auth: ${token ? "yes" : "no"})`);
       try {
         const res = await fetch(finalUrl, {
           method,
           headers,
           body: method !== "GET" && method !== "HEAD" && body != null ? JSON.stringify(body) : undefined,
         });
-        console.log(`[skill:${skillId}] ${method} ${finalUrl} -> ${res.status}`);
+        skillDebug(`[skill:${skillId}] ${method} ${finalUrl} -> ${res.status}`);
         const text = await res.text();
         let data: unknown;
         try {
@@ -195,14 +204,14 @@ export function createTokenRequestTool(
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       };
-      console.log(`[skill:${skillId}] ${method} ${url} (token: yes)`);
+      skillDebug(`[skill:${skillId}] ${method} ${url} (token: yes)`);
       try {
         const res = await fetch(url, {
           method,
           headers,
           body: method !== "GET" && method !== "HEAD" && body != null ? JSON.stringify(body) : undefined,
         });
-        console.log(`[skill:${skillId}] ${method} ${url} -> ${res.status}`);
+        skillDebug(`[skill:${skillId}] ${method} ${url} -> ${res.status}`);
         const text = await res.text();
         let data: unknown;
         try {

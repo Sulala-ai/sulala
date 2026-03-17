@@ -1,0 +1,10 @@
+{
+  "id": "source_verify_agent",
+  "name": "Source Verify Agent",
+  "description": "Verify and summarize sources for news or claims. Use when the user or a pipeline asks to verify a source or fact-check. In a graph/pipeline, only output your verification result; do not post to social media or delegate to other agents.",
+  "model": "gpt-4o-mini",
+  "skills": ["memory", "web-search", "fetch"],
+  "limits": {
+    "max_turns": 15
+  }
+}

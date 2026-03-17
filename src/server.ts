@@ -55,7 +55,7 @@ import { parseAgentConfig, type AgentConfig } from "./types/agent.js";
 import { readSkillConfig, writeSkillConfig } from "./core/config.js";
 import { startWorkers, startScheduler } from "./core/tasks.js";
 import { subscribe, type Event, type EventType } from "./core/events.js";
-import { listGraphs, loadGraph, saveGraph } from "./core/graphs.js";
+import { listGraphs, loadGraph, saveGraph, deleteGraph } from "./core/graphs.js";
 import { loadPlugins } from "./core/plugins.js";
 import { listSkills, getSkillConfigSchema, getSkillSetupMarkdown, getSkillMarketplace, getStoreRegistry, uninstallSkill, installSystemSkills } from "./skills/loader.js";
 import { getAgentOsHome, getDashboardSecret, getMemoryDbPath, readConfig, writeConfig, generateDashboardSecret } from "./core/config.js";
@@ -431,6 +431,16 @@ function createRoutes(): Record<string, unknown> {
           return jsonResponse({ error: msg }, 400);
         }
       },
+      DELETE: async (req: BunRequest<"/api/graphs/:id">) => {
+        const id = decodeURIComponent(req.params.id);
+        try {
+          await deleteGraph(id);
+          return Response.json({ ok: true }, { headers: CORS_HEADERS as HeadersInit });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          return jsonResponse({ error: msg }, 400);
+        }
+      },
     },
     "/api/memory/write": {
       POST: (req: Request) => handleMemoryWrite(req, memoryStore),
@@ -675,7 +685,7 @@ export async function startServer(): Promise<void> {
     server = Bun.serve({
     port: PORT,
     hostname: HOST,
-    idleTimeout: 120, // seconds; allow long agent runs (LLM + tool calls). Default 10s was too short.
+    idleTimeout: 255, // seconds; Bun max. Graph runs use SSE keepalive so long streams stay open.
     routes: wrapRouteHandlers(createRoutes(), dashboardSecret) as NonNullable<Parameters<typeof Bun.serve>[0]>["routes"],
     fetch(req, server) {
       const url = new URL(req.url);
@@ -731,6 +741,6 @@ export async function startServer(): Promise<void> {
     throw err;
   }
 
-  console.log(`Agent OS server running at ${server!.url}`);
+  console.info(`Agent OS server running at ${server!.url}`);
   startTelegramPolling(memoryStore);
 }

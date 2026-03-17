@@ -1,0 +1,13 @@
+{
+  "id": "sale-pipeline",
+  "nodes": [
+    { "id": "node_1", "agent": "research_agent" },
+    { "id": "node_2", "agent": "writer_agent" },
+    { "id": "node_3", "agent": "crm_hubspot_agent" }
+  ],
+  "edges": [
+    { "from": "node_1", "to": "node_2" },
+    { "from": "node_2", "to": "node_3" }
+  ],
+  "schedule_input": "Research one lead, draft outreach, and update HubSpot"
+}

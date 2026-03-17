@@ -2,7 +2,7 @@
 name: jq
 description: Parse, filter, and transform JSON (via jq). Use when the user wants to "parse this JSON", "extract field from this response", "filter JSON", or "get X from this API output".
 metadata:
-  clawdbot:
+  sulala:
     emoji: "📋"
     requires:
       bins:

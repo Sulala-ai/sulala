@@ -2,7 +2,7 @@
 name: translate
 description: Translate text to another language (e.g. via LibreTranslate). Use when the user says "translate this to [language]", "translate the above to Spanish", "translate to French", "how do you say X in Y".
 metadata:
-  clawdbot:
+  sulala:
     emoji: "🌐"
     requires:
       bins:

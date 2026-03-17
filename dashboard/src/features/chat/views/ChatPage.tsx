@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label"
 import { PanelLeftIcon, ChevronLeftIcon, PencilIcon, ChevronRightIcon, WrenchIcon, UserIcon, BotIcon } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { MarkdownContent } from "@/components/markdown-content"
+import { Particles } from "@/components/ui/particles"
+import { ShimmerBorder } from "@/components/ui/shimmer-border"
 
 export interface ToolCallStep {
   tool: string
@@ -90,6 +92,7 @@ export function ChatPage() {
   const [editingTitle, setEditingTitle] = useState("")
   const [autoSummarized, setAutoSummarized] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const sendAbortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     const savedConvId = window.localStorage.getItem("agent-os-chat-conversation-id")
@@ -111,7 +114,7 @@ export function ChatPage() {
             })
           if (history.length) setMessages(history)
         })
-        .catch(() => {})
+        .catch(() => { })
     }
     api
       .getAgents()
@@ -154,6 +157,8 @@ export function ChatPage() {
     const userContent = attachment ? `${text}\n[Attached: ${attachment.name}]` : text
     setMessages((prev) => [...prev, { role: "user", content: userContent, timestamp: new Date().toISOString() }])
     setSending(true)
+    const controller = new AbortController()
+    sendAbortRef.current = controller
     try {
       const saveUser = await api.saveConversationMessage({
         conversation_id: conversationId ?? undefined,
@@ -178,6 +183,7 @@ export function ChatPage() {
       await api.runAgentStream(agentId, text, {
         attachment_paths: attachmentPaths,
         conversation_id: convId,
+        signal: controller.signal,
         onDelta(delta) {
           setMessages((prev) => {
             const next = [...prev]
@@ -201,8 +207,8 @@ export function ChatPage() {
           if (data.steps?.length) savedContent.steps = data.steps
           if (data.usage) savedContent.usage = data.usage
           if (data.model) savedContent.model = data.model
-          api.saveConversationMessage({ conversation_id: convId, agent_id: agentId, role: "assistant", content: savedContent }).catch(() => {})
-          api.getConversations({ agent_id: agentId, limit: 50 }).then((res) => setConversations(res.conversations)).catch(() => {})
+          api.saveConversationMessage({ conversation_id: convId, agent_id: agentId, role: "assistant", content: savedContent }).catch(() => { })
+          api.getConversations({ agent_id: agentId, limit: 50 }).then((res) => setConversations(res.conversations)).catch(() => { })
         },
         onError(message) {
           setMessages((prev) => {
@@ -225,19 +231,27 @@ export function ChatPage() {
         }
       }
     } catch (e) {
-      const content = `Error: ${e instanceof Error ? e.message : String(e)}`
+      const isAbort = e instanceof Error && e.name === "AbortError"
+      const errorContent = isAbort ? null : `Error: ${e instanceof Error ? e.message : String(e)}`
       setMessages((prev) => {
         const next = [...prev]
         const last = next[next.length - 1]
         if (last?.role === "assistant" && !last.timestamp) {
-          next[next.length - 1] = { ...last, content, timestamp: new Date().toISOString() }
+          const finalContent = isAbort ? (last.content || "Stopped") : (errorContent ?? last.content)
+          next[next.length - 1] = { ...last, content: finalContent, timestamp: new Date().toISOString() }
           return next
         }
-        return [...prev, { role: "assistant" as const, content, timestamp: new Date().toISOString() }]
+        if (errorContent) return [...prev, { role: "assistant" as const, content: errorContent, timestamp: new Date().toISOString() }]
+        return next
       })
     } finally {
+      sendAbortRef.current = null
       setSending(false)
     }
+  }
+
+  function stopSending() {
+    sendAbortRef.current?.abort()
   }
 
   if (loading) return <div className="p-4 text-muted-foreground">Loading agents…</div>
@@ -280,7 +294,7 @@ export function ChatPage() {
                             setEditingConvId(null)
                             try {
                               await api.updateConversationTitle(c.id, t)
-                              api.getConversations({ agent_id: agentId, limit: 50 }).then((res) => setConversations(res.conversations)).catch(() => {})
+                              api.getConversations({ agent_id: agentId, limit: 50 }).then((res) => setConversations(res.conversations)).catch(() => { })
                             } catch {
                               // ignore
                             }
@@ -333,8 +347,8 @@ export function ChatPage() {
         </div>
       )}
 
-      <div className="flex flex-1 flex-col">
-        <div className="shrink-0 border-b p-4">
+      <div className="relative flex flex-1 flex-col">
+        <div className="shrink-0 border-b p-4 relative z-10">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <Label htmlFor="chat-agent" className="text-sm font-medium">Agent</Label>
@@ -364,13 +378,36 @@ export function ChatPage() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4">
+        {agentId && (
+          <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center">
+            <div className="flex h-[420px] w-full max-w-2xl flex-col items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-b from-background via-background/80 to-background">
+              <Particles className="absolute inset-0" />
+              {messages.length === 0 && (
+                <div className="relative flex flex-col items-center text-center gap-4">
+                  <ShimmerBorder className="p-1.5">
+                    <Avatar className="size-20 rounded-full bg-background/80 backdrop-blur">
+                      <AvatarImage src={avatarUrl(agents.find((a) => a.id === agentId)?.avatar)} alt="" />
+                      <AvatarFallback className="bg-muted text-muted-foreground">
+                        <BotIcon className="size-8" />
+                      </AvatarFallback>
+                    </Avatar>
+                  </ShimmerBorder>
+                  <p className="max-w-xs text-sm text-muted-foreground">
+                    Hi, I'm {agents.find((a) => a.id === agentId)?.name ?? agentId}, your AI assistant. Send a message to start a conversation.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="relative z-10 flex-1 overflow-y-auto p-4">
           <div className="mx-auto max-w-2xl space-y-4">
-            {messages.length === 0 && <p className="py-8 text-center text-sm text-muted-foreground">Send a message to start a conversation.</p>}
             {messages.map((m, i) => {
               const isStreaming = sending && i === messages.length - 1 && m.role === "assistant" && !m.timestamp
               const isUser = m.role === "user"
-              const currentAgent = agents.find((a) => a.id === agentId)
+              const convAgentId = conversations.find((c) => c.id === conversationId)?.agent_id ?? agentId
+              const currentAgent = agents.find((a) => a.id === convAgentId)
               return (
                 <div key={i} className={`flex gap-2 ${isUser ? "flex-row-reverse" : ""} max-w-[95%] ${isUser ? "ml-auto" : "mr-auto"}`}>
                   <Avatar className="size-8 shrink-0 rounded-full border border-border">
@@ -380,7 +417,7 @@ export function ChatPage() {
                     {m.role === "assistant" && currentAgent && (
                       <span className="mb-0.5 text-xs font-medium text-muted-foreground">{currentAgent.name}</span>
                     )}
-                    <div className={isUser ? "rounded-2xl rounded-tr-sm bg-primary px-4 py-2 text-sm text-primary-foreground" : "rounded-2xl rounded-tl-sm border bg-muted/50 px-4 py-2 text-sm"}>
+                    <div className={isUser ? "w-fit max-w-full sm:max-w-[72ch] rounded-2xl rounded-tr-sm bg-primary px-4 py-2 text-sm text-primary-foreground" : "w-fit max-w-full sm:max-w-[72ch] rounded-2xl rounded-tl-sm border bg-muted/50 px-4 py-2 text-sm"}>
                       {isUser ? (
                         <div className="whitespace-pre-wrap break-words">{m.content}{isStreaming && <span className="animate-pulse">▌</span>}</div>
                       ) : (
@@ -449,7 +486,11 @@ export function ChatPage() {
                 <span className="shrink-0 text-muted-foreground">📎</span>
                 <span className="truncate max-w-[120px]">{attachment ? attachment.name : "Attach"}</span>
               </label>
-              <Button type="submit" disabled={sending || !input.trim()}>{sending ? "Sending…" : "Send"}</Button>
+              {sending ? (
+                <Button type="button" variant="outline" onClick={stopSending}>Stop</Button>
+              ) : (
+                <Button type="submit" disabled={!input.trim()}>Send</Button>
+              )}
             </div>
             {attachment && <p className="text-xs text-muted-foreground">File will be uploaded to the agent workspace and the path shared with the agent (e.g. for YouTube upload).</p>}
           </form>

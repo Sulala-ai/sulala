@@ -5,7 +5,7 @@ credentials:
   - BLUESKY_HANDLE
   - BLUESKY_APP_PASSWORD
 metadata:
-  clawdbot:
+  sulala:
     emoji: "🦋"
     requires:
       bins:

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react"
+import { useEffect, useState, useMemo, useRef } from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 import {
   flexRender,
@@ -27,10 +27,26 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { X, MoreHorizontal, Settings, Trash2, Eye, EyeOff, Download, Store, ChevronLeft, ChevronRight, Search } from "lucide-react"
+import { X, MoreHorizontal, Settings, Trash2, Eye, EyeOff, Download, Store, ChevronLeft, ChevronRight, Search, ArrowUpCircle, ArrowUpRight } from "lucide-react"
 import { toast } from "sonner"
 import { MarkdownContent } from "@/components/markdown-content"
 import { McpServersForm } from "@/features/settings/components/McpServersForm"
+
+/** True when storeVersion is strictly greater than installedVersion (semver-style). Used to show Update. */
+function isVersionNewer(storeVersion: string, installedVersion: string | undefined): boolean {
+  if (!storeVersion?.trim()) return false
+  if (!installedVersion?.trim()) return true
+  const parse = (v: string) => v.trim().replace(/^v/i, "").split(".").map((n) => parseInt(n, 10) || 0)
+  const s = parse(storeVersion)
+  const i = parse(installedVersion)
+  for (let k = 0; k < Math.max(s.length, i.length); k++) {
+    const a = s[k] ?? 0
+    const b = i[k] ?? 0
+    if (a > b) return true
+    if (a < b) return false
+  }
+  return false
+}
 
 /** Per-skill config form state: skillId -> env key -> value (empty = "already set" or not filled) */
 type ConfigFormState = Record<string, Record<string, string>>
@@ -83,6 +99,10 @@ export function SkillsPage() {
   const [storeLoading, setStoreLoading] = useState(false)
   const [storeError, setStoreError] = useState<string | null>(null)
   const [installingSlug, setInstallingSlug] = useState<string | null>(null)
+  /** Discover tab: selected slugs for bulk install/update */
+  const [discoverSelected, setDiscoverSelected] = useState<Set<string>>(new Set())
+  const [bulkInstalling, setBulkInstalling] = useState(false)
+  const discoverSelectAllRef = useRef<HTMLInputElement | null>(null)
   const [skillsTab, setSkillsTab] = useState("installed")
   /** Discover tab pagination */
   const [discoverPage, setDiscoverPage] = useState(0)
@@ -125,6 +145,11 @@ export function SkillsPage() {
     if (skillsTab === "discover") loadStoreRegistry()
   }, [skillsTab])
 
+  /** Load store registry once on mount so Installed tab can show update available. */
+  useEffect(() => {
+    loadStoreRegistry()
+  }, [])
+
   const filteredSkills = useMemo(() => {
     const q = installedSearch.trim().toLowerCase()
     if (!q) return skills
@@ -160,6 +185,14 @@ export function SkillsPage() {
   useEffect(() => {
     if (discoverPage >= discoverTotalPages && discoverTotalPages > 0) setDiscoverPage(discoverTotalPages - 1)
   }, [discoverTotalPages, discoverPage])
+
+  useEffect(() => {
+    const el = discoverSelectAllRef.current
+    if (!el) return
+    const some = discoverSlice.some((s) => discoverSelected.has(s.slug))
+    const all = discoverSlice.length > 0 && discoverSlice.every((s) => discoverSelected.has(s.slug))
+    el.indeterminate = some && !all
+  }, [discoverSelected, discoverSlice])
 
   async function loadConfigured(skillId: string) {
     try {
@@ -328,6 +361,11 @@ export function SkillsPage() {
       cell: ({ row }) => row.original.description ? <span className="text-muted-foreground text-sm max-w-[240px] truncate block" title={row.original.description}>{row.original.description}</span> : "—",
     },
     {
+      id: "version",
+      header: "Version",
+      cell: ({ row }) => <span className="text-muted-foreground text-sm">{row.original.version ?? "—"}</span>,
+    },
+    {
       id: "tools",
       header: "Tools",
       cell: ({ row }) =>
@@ -348,15 +386,48 @@ export function SkillsPage() {
       cell: ({ row }) => {
         const skill = row.original
         const hasConfig = skill.required_env && skill.required_env.length > 0
+        const storeSkill = storeSkills.find((s) => s.slug === skill.id)
+        const updateAvailable = !!(
+          storeSkill?.downloadUrl &&
+          storeSkill.version &&
+          isVersionNewer(storeSkill.version, skill.version)
+        )
+        const isUpdating = installingSlug === skill.id
         return (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-8 w-8 p-0" disabled={uninstallingId !== null}>
+              <Button variant="ghost" className="h-8 w-8 p-0" disabled={uninstallingId !== null || isUpdating}>
                 <span className="sr-only">Open menu</span>
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              {updateAvailable && (
+                <DropdownMenuItem
+                  onClick={async () => {
+                    if (!storeSkill?.downloadUrl) return
+                    setInstallingSlug(skill.id)
+                    try {
+                      await api.installSkill({
+                        url: storeSkill.downloadUrl,
+                        slug: storeSkill.slug,
+                        version: storeSkill.version,
+                      })
+                      toast.success(`Updated: ${skill.id}`)
+                      load()
+                      loadStoreRegistry()
+                    } catch (e) {
+                      toast.error(e instanceof Error ? e.message : String(e))
+                    } finally {
+                      setInstallingSlug(null)
+                    }
+                  }}
+                  disabled={isUpdating}
+                >
+                  <ArrowUpCircle className="mr-2 h-4 w-4" />
+                  {isUpdating ? "Updating…" : "Update from hub"}
+                </DropdownMenuItem>
+              )}
               {hasConfig && (
                 <DropdownMenuItem onClick={() => setSetupDialogSkill(skill)}>
                   <Settings className="mr-2 h-4 w-4" />
@@ -378,7 +449,7 @@ export function SkillsPage() {
         )
       },
     },
-  ], [uninstallingId])
+  ], [uninstallingId, storeSkills, installingSlug])
 
   const skillsTable = useReactTable({
     data: filteredSkills,
@@ -520,7 +591,7 @@ export function SkillsPage() {
                 Discover
               </CardTitle>
               <CardDescription>
-                Skills from the SulalaHub store (ZIP install). Install downloads the skill as ZIP from the store.
+                Skills from the SulalaHub store (ZIP install). Use <strong>Details</strong> to open the skill on the store: see creator, rating, comments, and to rate, comment, or report.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -589,60 +660,185 @@ export function SkillsPage() {
                       </Select>
                     </div>
                   </div>
+                  {discoverSelected.size > 0 && (
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <span className="text-sm text-muted-foreground">
+                        {discoverSelected.size} selected
+                      </span>
+                      <Button
+                        size="sm"
+                        disabled={bulkInstalling}
+                        onClick={async () => {
+                          const toInstall = discoverSlice.filter(
+                            (s) => discoverSelected.has(s.slug) && (s.downloadUrl ?? "").trim() !== ""
+                          )
+                          if (toInstall.length === 0) return
+                          setBulkInstalling(true)
+                          let ok = 0
+                          let err = 0
+                          for (const s of toInstall) {
+                            try {
+                              await api.installSkill({
+                                url: s.downloadUrl!,
+                                slug: s.slug,
+                                version: s.version,
+                              })
+                              ok++
+                            } catch {
+                              err++
+                              toast.error(`Failed: ${s.name}`)
+                            }
+                          }
+                          if (ok) {
+                            toast.success(ok === 1 ? `Installed: ${toInstall[0]!.name}` : `Installed/updated ${ok} skills`)
+                            load()
+                            loadStoreRegistry()
+                            setDiscoverSelected(new Set())
+                          }
+                          setBulkInstalling(false)
+                        }}
+                      >
+                        {bulkInstalling ? "Installing…" : "Install / Update selected"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={bulkInstalling}
+                        onClick={() => setDiscoverSelected(new Set())}
+                      >
+                        Clear selection
+                      </Button>
+                    </div>
+                  )}
                   <div className="rounded-md border">
                     <Table>
                       <TableHeader>
                         <TableRow>
+                          <TableHead className="w-10">
+                            <input
+                              ref={discoverSelectAllRef}
+                              type="checkbox"
+                              aria-label="Select all on page"
+                              checked={
+                                discoverSlice.length > 0 &&
+                                discoverSlice.every((s) => discoverSelected.has(s.slug))
+                              }
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setDiscoverSelected((prev) => new Set([...prev, ...discoverSlice.map((s) => s.slug)]))
+                                } else {
+                                  const pageSlugs = new Set(discoverSlice.map((s) => s.slug))
+                                  setDiscoverSelected((prev) => new Set([...prev].filter((slug) => !pageSlugs.has(slug))))
+                                }
+                              }}
+                              disabled={bulkInstalling}
+                              className="rounded border-input"
+                            />
+                          </TableHead>
                           <TableHead>Name</TableHead>
                           <TableHead>Description</TableHead>
                           <TableHead className="w-[100px]">Version</TableHead>
-                          <TableHead className="w-[120px]">Actions</TableHead>
+                          <TableHead className="w-[200px]">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {discoverSlice.map((s) => {
-                          const installed = skills.some((i) => i.id === s.slug)
+                          const installedSkill = skills.find((i) => i.id === s.slug)
+                          const installed = !!installedSkill
+                          const updateAvailable = installed && s.version && isVersionNewer(s.version, installedSkill?.version)
                           const downloadUrl = s.downloadUrl ?? ""
+                          const doInstallOrUpdate = async () => {
+                            if (!downloadUrl) return
+                            setInstallingSlug(s.slug)
+                            try {
+                              const r = await api.installSkill({
+                                url: downloadUrl,
+                                slug: s.slug,
+                                version: s.version,
+                              })
+                              toast.success(updateAvailable ? `Updated: ${r.skill.id}` : `Installed: ${r.skill.id}`)
+                              load()
+                              loadStoreRegistry()
+                            } catch (e) {
+                              toast.error(e instanceof Error ? e.message : String(e))
+                            } finally {
+                              setInstallingSlug(null)
+                            }
+                          }
+                          const selected = discoverSelected.has(s.slug)
                           return (
                             <TableRow key={s.slug}>
+                              <TableCell className="w-10">
+                                <input
+                                  type="checkbox"
+                                  aria-label={`Select ${s.name}`}
+                                  checked={selected}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setDiscoverSelected((prev) => new Set([...prev, s.slug]))
+                                    } else {
+                                      setDiscoverSelected((prev) => {
+                                        const next = new Set(prev)
+                                        next.delete(s.slug)
+                                        return next
+                                      })
+                                    }
+                                  }}
+                                  disabled={bulkInstalling}
+                                  className="rounded border-input"
+                                />
+                              </TableCell>
                               <TableCell className="font-medium">{s.name}</TableCell>
                               <TableCell className="text-muted-foreground text-sm max-w-[320px] truncate" title={s.description}>
                                 {s.description ?? "—"}
                               </TableCell>
                               <TableCell className="text-muted-foreground text-sm">{s.version ?? "—"}</TableCell>
                               <TableCell>
-                                {installed ? (
-                                  <Badge variant="secondary">Installed</Badge>
-                                ) : (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    disabled={installingSlug !== null || !downloadUrl}
-                                    onClick={async () => {
-                                      if (!downloadUrl) return
-                                      setInstallingSlug(s.slug)
-                                      try {
-                                        const r = await api.installSkill({ url: downloadUrl, slug: s.slug })
-                                        toast.success(`Installed: ${r.skill.id}`)
-                                        load()
-                                        loadStoreRegistry()
-                                      } catch (e) {
-                                        toast.error(e instanceof Error ? e.message : String(e))
-                                      } finally {
-                                        setInstallingSlug(null)
-                                      }
-                                    }}
-                                  >
-                                    {installingSlug === s.slug ? (
-                                      "Installing…"
-                                    ) : (
-                                      <>
-                                        <Download className="mr-1.5 h-3.5 w-3.5" />
-                                        Install
-                                      </>
-                                    )}
-                                  </Button>
-                                )}
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  {storeBase && (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="text-muted-foreground"
+                                      asChild
+                                    >
+                                      <a
+                                        href={`${storeBase.replace(/\/$/, "")}/skills/${encodeURIComponent(s.slug)}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        title="View on store: creator, rating, comments, rate, report"
+                                      >
+                                        {/* open icon */}
+                                        <ArrowUpRight className="mr-1.5 h-3.5 w-3.5" />
+                                        Details
+                                      </a>
+                                    </Button>
+                                  )}
+                                  {installed && !updateAvailable ? (
+                                    <Badge variant="secondary">Installed</Badge>
+                                  ) : (
+                                    <Button
+                                      size="sm"
+                                      variant={updateAvailable ? "default" : "outline"}
+                                      disabled={installingSlug !== null || bulkInstalling || !downloadUrl}
+                                      onClick={doInstallOrUpdate}
+                                    >
+                                      {installingSlug === s.slug ? (
+                                        "Installing…"
+                                      ) : updateAvailable ? (
+                                        <>
+                                          <ArrowUpCircle className="mr-1.5 h-3.5 w-3.5" />
+                                          Update
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Download className="mr-1.5 h-3.5 w-3.5" />
+                                          Install
+                                        </>
+                                      )}
+                                    </Button>
+                                  )}
+                                </div>
                               </TableCell>
                             </TableRow>
                           )

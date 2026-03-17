@@ -4,7 +4,7 @@ description: Send a notification or message to a configurable webhook URL (e.g. 
 credentials:
   - WEBHOOK_URL
 metadata:
-  clawdbot:
+  sulala:
     emoji: "🔔"
     requires:
       bins:

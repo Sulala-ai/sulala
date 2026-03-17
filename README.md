@@ -2,6 +2,14 @@
 
 Lightweight **Bun-based Agent Operating System** — micro-agents, installable skills, workflows, and a web dashboard.
 
+## Showcase
+
+| Dashboard | Chat | Graphs |
+| --------- | ---- | ------ |
+| ![Dashboard](docs/media/Screenshot%202026-03-17%20at%2012.23.37%20AM.png) | ![Chat](docs/media/Screenshot%202026-03-17%20at%2012.24.06%20AM.png) | ![Graphs](docs/media/Screenshot%202026-03-17%20at%2012.26.11%20AM.png) |
+| **Skills** | **Schedules** | **Memory** |
+| ![Skills](docs/media/Screenshot%202026-03-17%20at%2012.26.51%20AM.png) | ![Schedules](docs/media/Screenshot%202026-03-17%20at%2012.27.00%20AM.png) | ![Memory](docs/media/Screenshot%202026-03-17%20at%2012.45.30%20AM.png) |
+
 ## How lightweight is Sulala?
 
 Compared to typical AI agent frameworks, **Sulala is extremely small** — the core repo is only on the order of **~100 KB**, and even with dependencies it stays around **sub‑MB scale**.
@@ -148,8 +156,12 @@ curl -X POST http://127.0.0.1:3010/api/agents/run \
 | `OPENROUTER_API_KEY` | OpenRouter API key |
 | `AGENT_OS_AGENTS_DIR` | Override agents directory (default: ~/.agent-os/agents/) |
 | `AGENT_MEMORY_DB_PATH` | SQLite path for memory (default: ~/.agent-os/database.db) |
+| `AGENT_OS_MAX_WORKERS` | Max concurrent task workers (default: 2× CPU). Set to `1` to serialize queue runs and reduce 429 rate limits. |
+| `AGENT_OS_TASKS_DIR` | Task log directory (default: ~/.agent-os/tasks) |
 
 API keys can also be set in **Dashboard → Settings → AI Provider** and are stored in `~/.agent-os/config.json`.
+
+**Request limit (429):** The runtime retries LLM calls up to 3 times with backoff on rate limit. For pipelines, you can also run graphs from **Schedules** (enqueued) and set `AGENT_OS_MAX_WORKERS=1` so only one task runs at a time.
 
 ## Project structure
 

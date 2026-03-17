@@ -2,7 +2,7 @@
 name: hash
 description: Compute or verify file checksums (SHA-256, MD5). Use when the user asks "checksum of this file", "SHA256 of …", "verify the digest", "hash of file", "MD5 of …".
 metadata:
-  clawdbot:
+  sulala:
     emoji: "🔐"
     requires:
       bins:

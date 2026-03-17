@@ -163,26 +163,50 @@ export async function handleTelegramWebhook(
 const POLLING_INTERVAL_MS = 1000;
 const GET_UPDATES_TIMEOUT = 30;
 
-/** Start long-polling when bot token is set and no webhook is registered (no HTTPS needed). */
+/** Start long-polling when bot token is set and no webhook is registered (no HTTPS needed).
+ * Poll loop runs always so that if the token is added later (e.g. after onboard in Settings), polling starts without restart. */
 export function startTelegramPolling(memoryStore: MemoryStore): void {
   let offset = 0;
+  let webhookDeletedForToken: string | null = null;
+  let loggedPollingStarted = false;
 
   async function poll() {
     const config = await readConfig();
     const botToken = config.telegram_bot_token?.trim();
     if (!botToken) {
+      webhookDeletedForToken = null;
+      loggedPollingStarted = false;
       setTimeout(poll, POLLING_INTERVAL_MS);
       return;
     }
     try {
-      const url = `https://api.telegram.org/bot${botToken}/getUpdates?offset=${offset}&timeout=${GET_UPDATES_TIMEOUT}`;
-      const res = await fetch(url);
+      const res = await fetch(`https://api.telegram.org/bot${botToken}/getWebhookInfo`);
       if (!res.ok) {
         setTimeout(poll, POLLING_INTERVAL_MS);
         return;
       }
-      const data = (await res.json()) as { ok?: boolean; result?: TelegramUpdate[] };
-      const updates = Array.isArray(data?.result) ? data.result : [];
+      const data = (await res.json()) as { ok?: boolean; result?: { url?: string } };
+      const webhookUrl = data?.result?.url?.trim();
+      if (webhookUrl) {
+        setTimeout(poll, POLLING_INTERVAL_MS);
+        return;
+      }
+      if (webhookDeletedForToken !== botToken) {
+        await fetch(`https://api.telegram.org/bot${botToken}/deleteWebhook`).catch(() => {});
+        webhookDeletedForToken = botToken;
+      }
+      if (!loggedPollingStarted) {
+        console.info("[telegram] polling started (no webhook set; no HTTPS required).");
+        loggedPollingStarted = true;
+      }
+      const url = `https://api.telegram.org/bot${botToken}/getUpdates?offset=${offset}&timeout=${GET_UPDATES_TIMEOUT}`;
+      const getRes = await fetch(url);
+      if (!getRes.ok) {
+        setTimeout(poll, POLLING_INTERVAL_MS);
+        return;
+      }
+      const updateData = (await getRes.json()) as { ok?: boolean; result?: TelegramUpdate[] };
+      const updates = Array.isArray(updateData?.result) ? updateData.result : [];
       for (const update of updates) {
         if (update.update_id != null && update.update_id >= offset) {
           offset = update.update_id + 1;
@@ -197,20 +221,5 @@ export function startTelegramPolling(memoryStore: MemoryStore): void {
     setTimeout(poll, 0);
   }
 
-  readConfig()
-    .then(async (config) => {
-      const botToken = config.telegram_bot_token?.trim();
-      if (!botToken) return;
-      const res = await fetch(`https://api.telegram.org/bot${botToken}/getWebhookInfo`);
-      if (!res.ok) return;
-      const data = (await res.json()) as { ok?: boolean; result?: { url?: string } };
-      const webhookUrl = data?.result?.url?.trim();
-      if (webhookUrl) {
-        return;
-      }
-      await fetch(`https://api.telegram.org/bot${botToken}/deleteWebhook`).catch(() => {});
-      console.log("[telegram] polling started (no webhook set; no HTTPS required).");
-      poll();
-    })
-    .catch(() => {});
+  poll();
 }

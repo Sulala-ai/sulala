@@ -23,7 +23,8 @@ import {
 } from "./core/config.js";
 import { MemoryStore } from "./db/memory-store.js";
 import { setAgentStore, seedAgentsIfEmpty, installSystemAgents } from "./core/agent-registry.js";
-import { installSystemSkills } from "./skills/loader.js";
+import { seedGraphsIfEmpty } from "./core/graphs.js";
+import { installSystemSkills, getStoreRegistry, installSkillFromUrl } from "./skills/loader.js";
 import { getAgent } from "./core/agent-registry.js";
 import { runAgent } from "./core/runtime.js";
 
@@ -74,6 +75,7 @@ Commands:
   onboard              First-time setup: create config, seed agents & skills, open dashboard
   update               Update package from npm and system agents/skills
   run <agent_id> <task>  Run an agent with a one-off task
+  skill install <slug> Install a skill from the store by slug (e.g. crm-hubspot)
   dashboard-token [--regenerate]  Show or regenerate dashboard login token (copy to log in)
 
 Examples:
@@ -84,6 +86,7 @@ Examples:
   sulala onboard
   sulala update
   sulala run echo_agent What is 2+2?
+  sulala skill install crm-hubspot
   sulala dashboard-token
   sulala dashboard-token --regenerate
 `);
@@ -221,22 +224,29 @@ async function cmdOnboard(): Promise<void> {
   setAgentStore(memoryStore);
   await seedAgentsIfEmpty();
   const { installed: agentsInstalled } = await installSystemAgents();
+  await seedGraphsIfEmpty();
   // Skills are not auto-installed; user installs default skills from the dashboard onboarding.
   console.log("Onboard complete. Agents:", agentsInstalled, "— Install default skills from the dashboard.");
 
   const started = await startServerDaemonIfNeeded();
   if (started) {
     console.log("Server starting in background. Use 'sulala stop' to stop.");
-    // Give the server a moment to bind before opening the browser
-    await new Promise((r) => setTimeout(r, 1500));
   }
-  openDashboard();
 
   const token = await getDashboardSecret();
   console.log("");
   console.log("Dashboard login token (copy and paste in the dashboard):");
   console.log(token);
   console.log("");
+
+  const readline = await import("node:readline");
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const answer = await new Promise<string>((resolve) => rl.question("Go to dashboard? (y/n): ", resolve));
+  rl.close();
+  if (/^y(es)?$/i.test(answer.trim())) {
+    if (started) await new Promise((r) => setTimeout(r, 1500));
+    openDashboard();
+  }
 }
 
 const NPM_PACKAGE = "@sulala/agent-os";
@@ -322,6 +332,59 @@ async function cmdRun(args: string[]): Promise<void> {
   }
 }
 
+async function cmdSkill(args: string[]): Promise<void> {
+  const sub = args[0]?.toLowerCase();
+  const rest = args.slice(1);
+  if (sub === "install") {
+    await cmdSkillInstall(rest);
+    return;
+  }
+  if (!sub || sub === "help" || sub === "-h" || sub === "--help") {
+    console.log("Usage: sulala skill install <slug>");
+    console.log("  Install a skill from the store by slug (e.g. crm-hubspot).");
+    console.log("  Installs the latest version; you can pin a specific version in your skill config if needed.");
+    console.log("");
+    console.log("Example: sulala skill install crm-hubspot");
+    return;
+  }
+  console.error(`Unknown subcommand: skill ${sub}`);
+  console.error("Usage: sulala skill install <slug>");
+  process.exit(1);
+}
+
+async function cmdSkillInstall(args: string[]): Promise<void> {
+  const slug = args[0]?.trim();
+  if (!slug) {
+    console.error("Usage: sulala skill install <slug>");
+    console.error("Example: sulala skill install crm-hubspot");
+    process.exit(1);
+  }
+  const { skills, storeBase } = await getStoreRegistry();
+  if (!storeBase) {
+    console.error("Could not reach the skills store. Check config (skills_registry_url) or run 'sulala onboard' first.");
+    process.exit(1);
+  }
+  const entry = skills.find((s) => s.slug === slug);
+  if (!entry) {
+    console.error(`Skill '${slug}' not found in the store. Check the slug at hub.sulala.ai or install from the dashboard (Skills page).`);
+    process.exit(1);
+  }
+  const downloadUrl = entry.downloadUrl ?? `${storeBase}/api/sulalahub/skills/${encodeURIComponent(slug)}/download`;
+  const version = entry.version;
+  try {
+    const { id } = await installSkillFromUrl(downloadUrl, slug, {
+      version: version ?? undefined,
+      source: "hub",
+    });
+    const verStr = version ? ` (v${version})` : "";
+    console.log(`Installed ${id}${verStr}. Add it to your agent in the dashboard (Edit agent → Skills).`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("Install failed:", msg);
+    process.exit(1);
+  }
+}
+
 async function main(): Promise<void> {
   if (!process.versions.bun) {
     console.error("Sulala CLI requires Bun. Use: bun run src/cli.ts");
@@ -352,6 +415,9 @@ async function main(): Promise<void> {
       break;
     case "run":
       await cmdRun(rest);
+      break;
+    case "skill":
+      await cmdSkill(rest);
       break;
     case "dashboard-token":
       await cmdDashboardToken(rest);

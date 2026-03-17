@@ -12,6 +12,7 @@ import {
 } from "../core/tasks.js";
 import { getRecentEvents } from "../core/events.js";
 import { loadGraph, runGraph, runGraphStream, type GraphStreamEvent } from "../core/graphs.js";
+import { promptGate } from "../core/prompt-gate.js";
 import {
   readConfig,
   writeConfig,
@@ -75,6 +76,21 @@ export async function handleRun(req: Request, memoryStore: MemoryStore): Promise
     }
   }
 
+  const gate = promptGate({ kind: "agent_run", agent_id }, task);
+  if (gate.decision === "needs_clarification") {
+    return jsonResponse(
+      {
+        success: false,
+        gated: true,
+        reason: gate.reason,
+        template: gate.template,
+        suggestions: gate.suggestions,
+        questions: gate.questions,
+      },
+      400
+    );
+  }
+
   try {
     const result = await runAgent({ agent, task, conversationHistory });
     return jsonResponse(result);
@@ -116,6 +132,26 @@ export async function handleRunStream(req: Request, memoryStore: MemoryStore): P
     } catch {
       // ignore
     }
+  }
+
+  const gate = promptGate({ kind: "agent_run", agent_id }, task);
+  if (gate.decision === "needs_clarification") {
+    const msg = `${gate.reason}\n\n${gate.template}`;
+    const encoder = new TextEncoder();
+    function send(type: string, data: object): string {
+      return `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`;
+    }
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            send("error", { message: msg, gated: true, suggestions: gate.suggestions, questions: gate.questions })
+          )
+        );
+        controller.close();
+      },
+    });
+    return new Response(stream, { headers: SSE_HEADERS });
   }
 
   const encoder = new TextEncoder();
@@ -198,6 +234,38 @@ export async function handleTasks(req: Request, url: URL): Promise<Response> {
       return jsonResponse({ error: "Missing required field: task" }, 400);
     }
     if (graph_id && !agent_id) {
+      const gate = promptGate({ kind: "graph_run", graph_id }, task);
+      if (gate.decision === "needs_clarification") {
+        return jsonResponse(
+          {
+            success: false,
+            gated: true,
+            reason: gate.reason,
+            template: gate.template,
+            suggestions: gate.suggestions,
+            questions: gate.questions,
+          },
+          400
+        );
+      }
+    }
+    if (agent_id && !graph_id) {
+      const gate = promptGate({ kind: "agent_run", agent_id }, task);
+      if (gate.decision === "needs_clarification") {
+        return jsonResponse(
+          {
+            success: false,
+            gated: true,
+            reason: gate.reason,
+            template: gate.template,
+            suggestions: gate.suggestions,
+            questions: gate.questions,
+          },
+          400
+        );
+      }
+    }
+    if (graph_id && !agent_id) {
       const t = await enqueueGraphTask(graph_id, task);
       return jsonResponse({ task: t }, 202);
     }
@@ -223,7 +291,7 @@ export async function handleLogs(req: Request): Promise<Response> {
 }
 
 export async function handleSkillInstall(req: Request): Promise<Response> {
-  const parsed = await parseJsonBody<{ path?: string; url?: string; slug?: string }>(req);
+  const parsed = await parseJsonBody<{ path?: string; url?: string; slug?: string; version?: string }>(req);
   if (!parsed.ok) return parsed.response;
   const body = parsed.body;
   const hasPath = typeof body.path === "string" && body.path.trim().length > 0;
@@ -235,10 +303,12 @@ export async function handleSkillInstall(req: Request): Promise<Response> {
     return jsonResponse({ error: "Provide path or url" }, 400);
   }
   const slug = typeof body.slug === "string" && body.slug.trim() !== "" ? body.slug.trim() : undefined;
+  const version = typeof body.version === "string" && body.version.trim() !== "" ? body.version.trim() : undefined;
+  const meta = version || slug ? { version, source: slug ? "hub" : undefined } : undefined;
   try {
     const result = hasPath
       ? await installSkillFromPath(body.path!.trim())
-      : await installSkillFromUrl(body.url!.trim(), slug);
+      : await installSkillFromUrl(body.url!.trim(), slug, meta);
     return jsonResponse({ skill: result }, 201);
   } catch (err) {
     const msg = errorMessage(err);
@@ -570,6 +640,20 @@ export async function handleGraphRun(req: Request): Promise<Response> {
     return jsonResponse({ error: `Graph not found: ${graph_id}` }, 404);
   }
 
+  const gate = promptGate({ kind: "graph_run", graph_id }, input);
+  if (gate.decision === "needs_clarification") {
+    return jsonResponse(
+      {
+        success: false,
+        gated: true,
+        reason: gate.reason,
+        template: gate.template,
+        questions: gate.questions,
+      },
+      400
+    );
+  }
+
   try {
     const result = await runGraph({ graph, input });
     return jsonResponse(result);
@@ -592,17 +676,64 @@ export async function handleGraphRunStream(req: Request): Promise<Response> {
     return jsonResponse({ error: `Graph not found: ${graph_id}` }, 404);
   }
 
+  if ((process.env.AGENT_OS_DEBUG ?? "").trim() === "1" || (process.env.AGENT_OS_DEBUG_GRAPHS ?? "").trim() === "1") {
+    console.log(`[graph] Graph chat stream requested: graph_id=${graph_id}, input length=${input?.length ?? 0}`);
+  }
+
   const encoder = new TextEncoder();
   function send(type: string, data: object): string {
     return `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`;
   }
 
+  const gate = promptGate({ kind: "graph_run", graph_id }, input);
+  if (gate.decision === "needs_clarification") {
+    const msg = `${gate.reason}\n\n${gate.template}`;
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(send("error", { message: msg, gated: true, questions: gate.questions })));
+        controller.close();
+      },
+    });
+    return new Response(stream, { headers: SSE_HEADERS });
+  }
+
+  const KEEPALIVE_INTERVAL_MS = 30_000; // send SSE comment every 30s so connection is not closed by idleTimeout during long node runs
   const stream = new ReadableStream({
     async start(controller) {
+      let closed = false;
+      function safeEnqueue(data: Uint8Array): void {
+        if (closed) return;
+        try {
+          controller.enqueue(data);
+        } catch {
+          closed = true;
+        }
+      }
+      function safeClose(): void {
+        if (closed) return;
+        try {
+          controller.close();
+        } catch {
+          // ignore
+        }
+        closed = true;
+      }
+      const keepalive = setInterval(() => {
+        if (closed) {
+          clearInterval(keepalive);
+          return;
+        }
+        try {
+          controller.enqueue(encoder.encode(": keepalive\n\n"));
+        } catch {
+          clearInterval(keepalive);
+          closed = true;
+        }
+      }, KEEPALIVE_INTERVAL_MS);
       try {
         await runGraphStream({ graph, input }, (ev: GraphStreamEvent) => {
           if (ev.type === "node_done") {
-            controller.enqueue(
+            safeEnqueue(
               encoder.encode(
                 send("node_done", {
                   node_id: ev.node_id,
@@ -614,7 +745,7 @@ export async function handleGraphRunStream(req: Request): Promise<Response> {
               )
             );
           } else if (ev.type === "done") {
-            controller.enqueue(
+            safeEnqueue(
               encoder.encode(
                 send("done", {
                   success: ev.success,
@@ -624,14 +755,15 @@ export async function handleGraphRunStream(req: Request): Promise<Response> {
               )
             );
           } else if (ev.type === "error") {
-            controller.enqueue(encoder.encode(send("error", { message: ev.message })));
+            safeEnqueue(encoder.encode(send("error", { message: ev.message })));
           }
         });
       } catch (err) {
         const msg = errorMessage(err);
-        controller.enqueue(encoder.encode(send("error", { message: msg })));
+        safeEnqueue(encoder.encode(send("error", { message: msg })));
       } finally {
-        controller.close();
+        clearInterval(keepalive);
+        safeClose();
       }
     },
   });

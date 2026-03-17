@@ -4,7 +4,7 @@ description: Search the web and get titles, snippets, and URLs. Use when the use
 credentials:
   - SERPER_API_KEY
 metadata:
-  clawdbot:
+  sulala:
     emoji: "🔍"
     requires:
       bins:

@@ -154,7 +154,10 @@ export class MemoryTaskStore implements TaskStore {
 
 export const memoryTaskStore = new MemoryTaskStore();
 
-const maxWorkers = Math.max(1, (os.cpus?.().length ?? 1) * 2);
+/** Number of concurrent task workers. Set AGENT_OS_MAX_WORKERS=1 to serialize runs and reduce 429 rate limits. */
+const maxWorkers = process.env.AGENT_OS_MAX_WORKERS != null
+  ? Math.max(1, parseInt(process.env.AGENT_OS_MAX_WORKERS, 10) || 1)
+  : Math.max(1, (os.cpus?.().length ?? 1) * 2);
 let workersStarted = false;
 
 async function workerLoop(store: TaskStore): Promise<void> {

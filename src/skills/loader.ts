@@ -31,6 +31,29 @@ export { getSkillsDir } from "../core/config.js";
 const SYSTEM_SKILL_IDS = new Set(["memory"]);
 const DEFAULT_SYSTEM_SKILL_IDS = ["memory", "date", "fetch", "jq", "file-search"];
 
+/** Meta file written when installing from hub so we know version without relying on SKILL.md frontmatter. */
+const SULALA_META_FILE = ".sulala-meta.json";
+
+async function readSkillMeta(skillDir: string, subEntries: string[]): Promise<{ version?: string } | null> {
+  if (!subEntries.includes(SULALA_META_FILE)) return null;
+  try {
+    const raw = await readFile(join(skillDir, SULALA_META_FILE), "utf-8");
+    const data = JSON.parse(raw) as { version?: string };
+    return typeof data.version === "string" && data.version.trim() !== "" ? { version: data.version.trim() } : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeSkillMeta(skillId: string, meta: { version?: string; source?: string }): Promise<void> {
+  const skillDir = join(getSkillsDir(), skillId);
+  const payload: Record<string, string> = {};
+  if (meta.version?.trim()) payload.version = meta.version.trim();
+  if (meta.source?.trim()) payload.source = meta.source.trim();
+  if (Object.keys(payload).length === 0) return;
+  await writeFile(join(skillDir, SULALA_META_FILE), JSON.stringify(payload, null, 0), "utf-8");
+}
+
 async function loadSkill(name: string): Promise<void> {
   const dir = join(getSkillsDir(), name);
   let entries: string[];
@@ -146,6 +169,8 @@ export interface SkillSummary {
   id: string;
   name: string;
   description?: string;
+  /** Version from SKILL.md frontmatter. Used by dashboard to show update when store has newer. */
+  version?: string;
   tools: Array<{ id: string; description?: string }>;
   required_env?: string[];
   system?: boolean;
@@ -324,10 +349,14 @@ export async function listSkills(): Promise<SkillSummary[]> {
     if (!doc) continue;
     const skillName = doc.name ?? name;
     const requiredEnv = await getRequiredEnvForSkill(skillDir, subEntries, doc);
+    const docVersion = doc.version?.trim() || undefined;
+    const meta = await readSkillMeta(skillDir, subEntries);
+    const version = docVersion ?? meta?.version;
     results.push({
       id: name,
       name: skillName,
       description: doc.description,
+      version,
       tools: (doc.tools ?? []).map((t) => ({ id: t.id, description: t.description })),
       required_env: requiredEnv.length ? requiredEnv : undefined,
       system: SYSTEM_SKILL_IDS.has(name),
@@ -395,7 +424,11 @@ export async function installSystemSkills(): Promise<{ installed: number }> {
   return { installed };
 }
 
-export async function installSkillFromUrl(url: string, explicitId?: string): Promise<{ id: string }> {
+export async function installSkillFromUrl(
+  url: string,
+  explicitId?: string,
+  meta?: { version?: string; source?: string }
+): Promise<{ id: string }> {
   const urlLower = url.toLowerCase();
   const isStoreSkillContentUrl =
     urlLower.includes("/api/sulalahub/skills/") && !urlLower.includes("/download") && !urlLower.endsWith(".zip");
@@ -412,6 +445,7 @@ export async function installSkillFromUrl(url: string, explicitId?: string): Pro
   await mkdir(tmpDir, { recursive: true });
 
   try {
+    let destId: string;
     if (isZip) {
       const zipPath = join(tmpDir, "archive.zip");
       await writeFile(zipPath, new Uint8Array(buf));
@@ -422,21 +456,24 @@ export async function installSkillFromUrl(url: string, explicitId?: string): Pro
         throw new Error(`unzip failed: ${err}`);
       }
       const { id, sourcePath } = await chooseSkillRootFromExtract(tmpDir, "archive.zip");
-      const destId = explicitId != null && explicitId.trim() !== "" ? slugToSkillId(explicitId) : id;
+      destId = explicitId != null && explicitId.trim() !== "" ? slugToSkillId(explicitId) : id;
       await cp(sourcePath, join(skillsDir, destId), { recursive: true });
-      return { id: destId };
+    } else {
+      const tarPath = join(tmpDir, "archive.tar.gz");
+      await writeFile(tarPath, new Uint8Array(buf));
+      const proc = Bun.spawn({ cmd: ["tar", "-xzf", tarPath, "-C", tmpDir], stdout: "ignore", stderr: "pipe" });
+      const exit = await proc.exited;
+      if (exit !== 0) {
+        const err = await new Response(proc.stderr).text();
+        throw new Error(`tar extract failed: ${err}`);
+      }
+      const { id, sourcePath } = await chooseSkillRootFromExtract(tmpDir, "archive.tar.gz");
+      destId = explicitId != null && explicitId.trim() !== "" ? slugToSkillId(explicitId) : id;
+      await cp(sourcePath, join(skillsDir, destId), { recursive: true });
     }
-    const tarPath = join(tmpDir, "archive.tar.gz");
-    await writeFile(tarPath, new Uint8Array(buf));
-    const proc = Bun.spawn({ cmd: ["tar", "-xzf", tarPath, "-C", tmpDir], stdout: "ignore", stderr: "pipe" });
-    const exit = await proc.exited;
-    if (exit !== 0) {
-      const err = await new Response(proc.stderr).text();
-      throw new Error(`tar extract failed: ${err}`);
+    if (meta?.version?.trim() || meta?.source?.trim()) {
+      await writeSkillMeta(destId, { version: meta.version, source: meta.source ?? (explicitId ? "hub" : undefined) });
     }
-    const { id, sourcePath } = await chooseSkillRootFromExtract(tmpDir, "archive.tar.gz");
-    const destId = explicitId != null && explicitId.trim() !== "" ? slugToSkillId(explicitId) : id;
-    await cp(sourcePath, join(skillsDir, destId), { recursive: true });
     return { id: destId };
   } finally {
     await rm(tmpDir, { recursive: true, force: true });

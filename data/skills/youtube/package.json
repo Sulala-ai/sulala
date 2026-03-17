@@ -1,8 +1,0 @@
-{
-  "name": "youtube-skill",
-  "private": true,
-  "description": "YouTube upload script dependencies",
-  "dependencies": {
-    "googleapis": "^144.0.0"
-  }
-}

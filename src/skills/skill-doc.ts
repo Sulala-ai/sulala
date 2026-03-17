@@ -13,6 +13,8 @@ export interface SkillMetadataClawdbot {
 export interface SkillFile {
   name?: string;
   description?: string;
+  /** Version from frontmatter (e.g. 1.0.0). Used to compare with store for update. */
+  version?: string;
   api_base?: string;
   base_url_env?: string;
   credentials?: string[] | string;

@@ -2,7 +2,7 @@
 name: rss
 description: Fetch RSS or Atom feed content from a URL. Use when the user asks "latest from this blog", "what's new on …", "recent posts from [URL]", "RSS feed", "feed from …".
 metadata:
-  clawdbot:
+  sulala:
     emoji: "📰"
     requires:
       bins:

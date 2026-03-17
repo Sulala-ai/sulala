@@ -29,7 +29,10 @@ export async function getDefaultAgent(
   return agents[0] ?? null;
 }
 
-export async function runAgentWithConversation(
+/** Per-conversation queue: one message at a time per chat for ordered replies and fewer concurrent agent runs. */
+const conversationTails = new Map<string, Promise<void>>();
+
+async function runOneWithConversation(
   memoryStore: MemoryStore,
   agent: AgentConfig,
   conversationId: string,
@@ -56,4 +59,24 @@ export async function runAgentWithConversation(
     contentJson: JSON.stringify({ text: output }),
   });
   await sendReply(output);
+}
+
+export async function runAgentWithConversation(
+  memoryStore: MemoryStore,
+  agent: AgentConfig,
+  conversationId: string,
+  userId: string | null,
+  task: string,
+  sendReply: (output: string) => Promise<void>
+): Promise<void> {
+  const prev = conversationTails.get(conversationId) ?? Promise.resolve();
+  const next = prev
+    .then(() =>
+      runOneWithConversation(memoryStore, agent, conversationId, userId, task, sendReply)
+    )
+    .catch((err) => {
+      console.error(`[channel] conversation ${conversationId} error:`, err);
+    });
+  conversationTails.set(conversationId, next);
+  return next;
 }

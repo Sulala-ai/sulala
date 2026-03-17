@@ -639,13 +639,15 @@ function buildSystemPrompt(
   parts.push("Answer the user's task concisely.");
   const skillList = agent.skills?.length ? agent.skills.join(", ") : "none (built-in tools only)";
   parts.push(`Your skills: ${skillList}.`);
-  // When the task clearly requires a skill not in the list, tell user to install from hub — do not attempt the task (avoids 429 from repeated LLM/tool attempts).
   parts.push(
-    "If the user's task clearly requires a capability that only a skill can provide (e.g. post to Bluesky, send email, search the web, weather, run a specific integration) and that skill is NOT in your skills list above: reply with a single short message that you don't have that skill and they should install it from hub.sulala.ai (Dashboard → Skills → install from store) and add it to this agent in Edit agent. Do NOT attempt the task. Do NOT call any tools. Do NOT suggest workarounds. One sentence only."
+    "If a skill in your list above can fulfill the user's request, you MUST use it (via the exec tool or the skill's request tool as described in the skill documentation below). Do not claim you lack that capability."
+  );
+  parts.push(
+    "Only when no skill in your list can provide the requested capability: reply briefly that you don't have that skill and that they can install it from the addon store (Dashboard → Skills → install from store) and add it to this agent. Do not suggest installing when you already have a skill that can do it."
   );
   if (delegateableAgents?.length) {
     parts.push(
-      "You have the run_agent tool. When the user asks for something that another agent can do (e.g. post to Bluesky, search the web, send email), first tell the user in natural language that you are asking another agent to handle that part (for example: 'I’ll ask our Social Media Agent to post that on Bluesky for you.' or 'I’ll hand this off to our Research Agent to look that up.'). Then use run_agent with that agent's id and the task. After the other agent finishes, reply to the user with a short, friendly summary of what that agent did and the outcome (for example: 'The Social Media Agent has finished — your post \"hi\" is now live on Bluesky.')."
+      "You have the run_agent tool. When the user asks for something another agent can do, tell the user in natural language that you are delegating to another agent, then use run_agent with that agent's id and the task. After they finish, reply with a short, friendly summary of what was done and the outcome."
     );
     parts.push(
       "Available agents to delegate to (use run_agent with agent_id and task): " +
@@ -655,23 +657,27 @@ function buildSystemPrompt(
     const memoryAgentIds = delegateableAgents.filter((a) => a.skills?.includes("memory")).map((a) => a.id);
     if (memoryAgentIds.length) {
       parts.push(
-        `Agents with long-term memory (use for remember/save requests): ${memoryAgentIds.join(", ")}. When the user asks to remember something, save a fact about themselves, or store information for later, use run_agent with one of these agents and a task like "Remember that [fact]" or "Save: [fact]". Do not say you cannot save—delegate to an agent that has memory.`
+        `Agents with long-term memory (use for remember/save requests): ${memoryAgentIds.join(", ")}. When the user asks to remember something or save a fact, use run_agent with one of these agents and a task like "Remember that [fact]" or "Save: [fact]". Do not say you cannot save—delegate to an agent that has memory.`
       );
     }
   }
   if (hasTools) {
     parts.push("You have access to tools. Use them when helpful to answer the user.");
-    parts.push(`Your agent id is "${agent.id}". When a skill requires agent_id (e.g. memory_write), use this value in the request body.`);
+    parts.push(`Your agent id is "${agent.id}". When a skill requires agent_id in the request body, use this value.`);
     parts.push("After using tools, always reply with a brief summary for the user; never end with only tool calls.");
-    // Generic: when skills expose *_request tools, use the right skill's tool for skill-specific tasks (per skill doc), not echo/memory.
     if (skillDocContext?.includes("_request")) {
       parts.push(
-        "When the user asks for something a skill handles (e.g. list connections, send email, call an API), use that skill's request tool (e.g. skill_id_request) with the method, path, and body from the skill documentation below. Do not use echo, memory_search, or memory_write for skill-specific actions—use the skill's request tool as described in the skill documentation."
+        "When the user asks for something a skill handles, use that skill's request tool (the one whose id ends with _request) with method, path, and body from the skill documentation below. Do not use echo, memory_search, or memory_write for skill-specific actions—use the skill's request tool as described in the documentation."
+      );
+    }
+    if (skillDocContext?.includes("exec") && skillDocContext?.includes("skill_id")) {
+      parts.push(
+        "When the skill documentation below shows commands to run (e.g. scripts), use the exec tool with skill_id set to that skill and command set to the exact command from the doc."
       );
     }
   }
   if (skillDocContext) {
-    parts.push("---\n\n# Skill documentation\n\nUse the following documentation to know how to call skill APIs. When you have a tool like \"skill_id:request\", use method, path, query, and body as described below.\n\n" + skillDocContext);
+    parts.push("---\n\n# Skill documentation\n\nUse the documentation below to call skill APIs: for request-style tools use method, path, query, and body; for script-style skills use exec with skill_id and the command.\n\n" + skillDocContext);
   }
   return parts.join("\n\n");
 }

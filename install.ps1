@@ -1,7 +1,7 @@
 # Sulala Agent OS — one-line install (Windows PowerShell)
 # Usage: iwr -useb https://sulala.ai/install.ps1 | iex
 #        & ([scriptblock]::Create((iwr -useb https://sulala.ai/install.ps1))) -Version 0.1.8 -NoOnboard -DryRun
-# Or from npm package: & node_modules\@sulala\agent-os\install.ps1
+# Or from npm package: & node_modules\@sulala-ai\agent-os\install.ps1
 # If npm/sulala show "scripts is disabled", run once: Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 
 param(
@@ -11,7 +11,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$REPO_NAME = "@sulala/agent-os"
+$REPO_NAME = "@sulala-ai/agent-os"
 $NODE_MIN_MAJOR = 18
 $DASHBOARD_PORT = if ($env:PORT) { $env:PORT } else { "3010" }
 
@@ -213,7 +213,7 @@ function Invoke-SulalaCommand {
     & $commandPath @Arguments
 }
 
-# Install @sulala/agent-os globally
+# Install @sulala-ai/agent-os globally
 function Install-Sulala {
     if ([string]::IsNullOrWhiteSpace($Version)) {
         $Version = "latest"

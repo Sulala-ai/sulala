@@ -38,8 +38,8 @@ It does **not** bundle heavy Python stacks (numpy, vector DBs, complex orchestra
 **From npm (Bun or Node 18+):**
 
 ```bash
-bun add -g @sulala/agent-os
-# or: npm install -g @sulala/agent-os
+bun add -g @sulala-ai/agent-os
+# or: npm install -g @sulala-ai/agent-os
 ```
 
 **One-line install (macOS & Linux):**

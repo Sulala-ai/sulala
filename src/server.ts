@@ -694,7 +694,7 @@ export async function startServer(): Promise<void> {
   const dashboardMissing = !existsSync(DASHBOARD_DIST) || !existsSync(join(DASHBOARD_DIST, "index.html"));
   if (dashboardMissing) {
     console.warn(
-      `[sulala] Dashboard not found at ${DASHBOARD_DIST}. From package root run: cd dashboard && npm run build. If using a global install, reinstall: bun install -g @sulala/agent-os@latest`
+      `[sulala] Dashboard not found at ${DASHBOARD_DIST}. From package root run: cd dashboard && npm run build. If using a global install, reinstall: bun install -g @sulala-ai/agent-os@latest`
     );
   }
 
@@ -727,7 +727,7 @@ export async function startServer(): Promise<void> {
               error: "Dashboard not built",
               path: DASHBOARD_DIST,
               hint: "From the sulala package root run: cd dashboard && npm run build",
-              hint_global: "If you installed globally, reinstall to get the dashboard: bun install -g @sulala/agent-os@latest",
+              hint_global: "If you installed globally, reinstall to get the dashboard: bun install -g @sulala-ai/agent-os@latest",
             },
             { status: 404, headers: CORS_HEADERS as HeadersInit }
           );

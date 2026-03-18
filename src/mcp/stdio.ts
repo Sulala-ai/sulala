@@ -27,7 +27,7 @@ export class McpStdioClient {
   constructor(server: McpServerInfo) {
     this.server = server;
     this.client = new Client({
-      name: "@sulala/agent-os",
+      name: "@sulala-ai/agent-os",
       version: "0.1.0",
     });
   }

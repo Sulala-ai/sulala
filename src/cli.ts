@@ -249,7 +249,7 @@ async function cmdOnboard(): Promise<void> {
   }
 }
 
-const NPM_PACKAGE = "@sulala/agent-os";
+const NPM_PACKAGE = "@sulala-ai/agent-os";
 
 async function cmdUpdate(): Promise<void> {
   // 1. Update package to latest from npm (global install)
@@ -266,7 +266,7 @@ async function cmdUpdate(): Promise<void> {
     console.log("Package updated to latest from npm.");
     if (out.trim()) console.log(out.trim());
   } else {
-    console.warn("Could not update package from npm (run 'bun install -g @sulala/agent-os@latest' manually):", err.trim() || out.trim());
+    console.warn("Could not update package from npm (run 'bun install -g @sulala-ai/agent-os@latest' manually):", err.trim() || out.trim());
   }
 
   // 2. Update system agents and skills (if DB exists)

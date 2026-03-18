@@ -19,7 +19,7 @@ How the CLI is structured and how to extend it.
 | `start`        | `cmdStart(rest)` | No args: runs server in foreground via `import("./server.js")` → `startServer()`. With `--daemon`: spawns `bun run dist/index.js` (or `src/index.ts` if no dist) from **package root** (`import.meta.dir/..`), writes PID to `~/.agent-os/sulala.pid`. |
 | `stop`         | `cmdStop()`   | Reads PID from `~/.agent-os/sulala.pid`, sends SIGTERM, deletes PID file. |
 | `onboard`      | `cmdOnboard()` | Creates `~/.agent-os`, DB dir, `config.json` if missing; sets up `MemoryStore`, runs `seedAgentsIfEmpty()` + `installSystemAgents()` (no system skills); starts server daemon if needed, opens dashboard in browser. |
-| `update`       | `cmdUpdate()` | Runs `bun install -g @sulala/agent-os@latest`; then if DB exists, runs `installSystemAgents()` and `installSystemSkills()`. |
+| `update`       | `cmdUpdate()` | Runs `bun install -g @sulala-ai/agent-os@latest`; then if DB exists, runs `installSystemAgents()` and `installSystemSkills()`. |
 | `run`          | `cmdRun(rest)` | `rest[0]` = agent id, `rest.slice(1).join(" ")` = task; uses same DB as server; loads agent, runs `runAgent()`, prints result. |
 | `help`, `-h`, `--help`, or no command | `printHelp()` | Prints usage and exits. |
 | Anything else   | Error + `printHelp()` + `process.exit(1)`. |

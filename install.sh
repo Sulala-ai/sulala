@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Sulala Agent OS — one-line install (macOS and Linux)
 # Usage: curl -fsSL --proto '=https' --tlsv1.2 https://sulala.ai/install.sh | bash
-#        Or from npm package: bash node_modules/@sulala/agent-os/install.sh
+#        Or from npm package: bash node_modules/@sulala-ai/agent-os/install.sh
 
 BOLD='\033[1m'
 ACCENT='\033[38;2;99;102;241m'      # indigo
@@ -15,7 +15,7 @@ MUTED='\033[38;2;100;116;139m'
 NC='\033[0m'
 
 SULALA_VERSION="${SULALA_VERSION:-latest}"
-REPO_NAME="@sulala/agent-os"
+REPO_NAME="@sulala-ai/agent-os"
 NODE_MIN_MAJOR=18
 DASHBOARD_PORT="${PORT:-3010}"
 ORIGINAL_PATH="${PATH:-}"

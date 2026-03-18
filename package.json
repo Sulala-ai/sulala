@@ -55,7 +55,6 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
-    "@sulala-ai/agent-os": "^0.1.0",
     "node-cron": "^4.2.1",
     "react-force-graph-2d": "^1.25.2",
     "tweetnacl": "^1.0.3",

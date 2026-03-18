@@ -1,16 +1,17 @@
 {
   "name": "@sulala-ai/agent-os",
-  "version": "0.1.38",
+  "version": "0.1.42",
   "description": "Lightweight Bun-based Agent Operating System — micro-agents, skills, workflows",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Sulala-ai/sulala.git"
+    "url": "git+https://github.com/Sulala-ai/sulala.git"
   },
   "homepage": "https://github.com/Sulala-ai/sulala#readme",
   "bugs": {
     "url": "https://github.com/Sulala-ai/sulala/issues"
   },
   "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
     "access": "public"
   },
   "type": "module",

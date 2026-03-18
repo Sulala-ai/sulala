@@ -94,6 +94,7 @@ export class MemoryStore {
     this.migrateMemoriesEmbedding();
     this.migrateAgentsScheduleEnabled();
     this.migrateConversationsGraphId();
+    this.migrateAgentsScheduleReportTargets();
   }
 
   private migrateMemoriesEmbedding(): void {
@@ -115,6 +116,14 @@ export class MemoryStore {
   private migrateConversationsGraphId(): void {
     try {
       this.db.exec("ALTER TABLE conversations ADD COLUMN graph_id TEXT");
+    } catch {
+      // Column already exists
+    }
+  }
+
+  private migrateAgentsScheduleReportTargets(): void {
+    try {
+      this.db.exec("ALTER TABLE agents ADD COLUMN schedule_report_targets TEXT");
     } catch {
       // Column already exists
     }
@@ -357,6 +366,7 @@ export class MemoryStore {
       schedule: row.schedule ?? undefined,
       schedule_input: row.schedule_input ?? undefined,
       schedule_enabled: row.schedule_enabled !== undefined ? Number(row.schedule_enabled) === 1 : true,
+      schedule_report_targets: row.schedule_report_targets ? JSON.parse(String(row.schedule_report_targets)) : undefined,
       avatar: row.avatar ?? undefined,
       user_created: Number(row.user_created) === 1,
       limits: row.limits ? JSON.parse(String(row.limits)) : undefined,
@@ -389,14 +399,15 @@ export class MemoryStore {
     const schedule = config.schedule != null ? String(config.schedule) : null;
     const schedule_input = config.schedule_input != null ? String(config.schedule_input) : null;
     const schedule_enabled = config.schedule_enabled === false ? 0 : 1;
+    const schedule_report_targets = config.schedule_report_targets != null ? JSON.stringify(config.schedule_report_targets) : null;
     const avatar = config.avatar != null ? String(config.avatar) : null;
     const user_created = config.user_created === true ? 1 : 0;
     const limits = config.limits != null ? JSON.stringify(config.limits) : null;
     const stmt = this.db.prepare(
-      `INSERT INTO agents (id, name, model, description, personality, skills, tools, schedule, schedule_input, schedule_enabled, avatar, user_created, limits)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO agents (id, name, model, description, personality, skills, tools, schedule, schedule_input, schedule_enabled, schedule_report_targets, avatar, user_created, limits)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
-    stmt.run(id, name, model, description, personality, skills, tools, schedule, schedule_input, schedule_enabled, avatar, user_created, limits);
+    stmt.run(id, name, model, description, personality, skills, tools, schedule, schedule_input, schedule_enabled, schedule_report_targets, avatar, user_created, limits);
   }
 
   /** Update an existing agent. Only provided fields are updated. */
@@ -414,6 +425,7 @@ export class MemoryStore {
       schedule_input?: string | null;
       avatar?: string | null;
       schedule_enabled?: boolean | null;
+      schedule_report_targets?: Array<{ channel: string; address: string }> | null;
     }
   ): void {
     const agent = this.getAgentById(id);
@@ -432,10 +444,14 @@ export class MemoryStore {
       updates.schedule_enabled !== undefined && updates.schedule_enabled !== null
         ? (updates.schedule_enabled ? 1 : 0)
         : (agent.schedule_enabled === true || agent.schedule_enabled === 1 ? 1 : 0);
+    const schedule_report_targets =
+      updates.schedule_report_targets !== undefined
+        ? (updates.schedule_report_targets?.length ? JSON.stringify(updates.schedule_report_targets) : null)
+        : (agent.schedule_report_targets != null ? (typeof agent.schedule_report_targets === "string" ? agent.schedule_report_targets : JSON.stringify(agent.schedule_report_targets)) : null);
     const stmt = this.db.prepare(
-      "UPDATE agents SET name = ?, model = ?, description = ?, personality = ?, skills = ?, tools = ?, limits = ?, schedule = ?, schedule_input = ?, avatar = ?, schedule_enabled = ?, updated_at = datetime('now') WHERE id = ?"
+      "UPDATE agents SET name = ?, model = ?, description = ?, personality = ?, skills = ?, tools = ?, limits = ?, schedule = ?, schedule_input = ?, avatar = ?, schedule_enabled = ?, schedule_report_targets = ?, updated_at = datetime('now') WHERE id = ?"
     );
-    stmt.run(name, model, description, personality, skills, tools, limits, schedule, schedule_input, avatar, schedule_enabled, id);
+    stmt.run(name, model, description, personality, skills, tools, limits, schedule, schedule_input, avatar, schedule_enabled, schedule_report_targets, id);
   }
 
   /** Delete an agent by id. */

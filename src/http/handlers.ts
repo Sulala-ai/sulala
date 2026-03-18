@@ -384,6 +384,7 @@ export async function handleSettings(req: Request): Promise<Response> {
       has_openrouter_key: Boolean(config.openrouter_api_key?.trim()),
       telegram_configured: Boolean(config.telegram_bot_token?.trim()),
       telegram_default_agent_id: config.telegram_default_agent_id ?? null,
+      telegram_report_chat_id: config.telegram_report_chat_id ?? null,
       slack_configured: Boolean(config.slack_bot_token?.trim()),
       slack_default_agent_id: config.slack_default_agent_id ?? null,
       discord_configured: Boolean(config.discord_bot_token?.trim()),
@@ -406,6 +407,7 @@ export async function handleSettings(req: Request): Promise<Response> {
       openrouter_api_key?: string | null;
       telegram_bot_token?: string | null;
       telegram_default_agent_id?: string | null;
+      telegram_report_chat_id?: string | null;
       slack_bot_token?: string | null;
       slack_signing_secret?: string | null;
       slack_default_agent_id?: string | null;
@@ -456,6 +458,10 @@ export async function handleSettings(req: Request): Promise<Response> {
       body.telegram_default_agent_id !== undefined
         ? (typeof body.telegram_default_agent_id === "string" ? body.telegram_default_agent_id.trim() || undefined : undefined)
         : current.telegram_default_agent_id;
+    const telegram_report_chat_id =
+      body.telegram_report_chat_id !== undefined
+        ? (typeof body.telegram_report_chat_id === "string" ? body.telegram_report_chat_id.trim() || undefined : undefined)
+        : current.telegram_report_chat_id;
     const slack_bot_token =
       body.slack_bot_token !== undefined
         ? (typeof body.slack_bot_token === "string" ? body.slack_bot_token.trim() : undefined)
@@ -509,6 +515,7 @@ export async function handleSettings(req: Request): Promise<Response> {
       openrouter_api_key: openrouter_api_key ?? undefined,
       telegram_bot_token: telegram_bot_token || undefined,
       telegram_default_agent_id: telegram_default_agent_id || undefined,
+      telegram_report_chat_id: telegram_report_chat_id ?? undefined,
       slack_bot_token: slack_bot_token || undefined,
       slack_signing_secret: slack_signing_secret ?? undefined,
       slack_default_agent_id: slack_default_agent_id || undefined,

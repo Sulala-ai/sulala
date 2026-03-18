@@ -8,6 +8,7 @@
 import { readFile, readdir, writeFile, mkdir, copyFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
+import type { ScheduleReportTarget } from "../types/agent.js";
 import { getAgent } from "./agent-registry.js";
 import { runAgent } from "./runtime.js";
 import { errorMessage } from "./error.js";
@@ -35,6 +36,8 @@ export interface Graph {
   schedule_input?: string;
   /** If false, cron for this graph is paused. Default true when schedule is set. */
   schedule_enabled?: boolean;
+  /** Send schedule run report to these targets (e.g. Telegram chat). */
+  schedule_report_targets?: ScheduleReportTarget[];
 }
 
 const DEFAULT_GRAPHS_DIR = join(

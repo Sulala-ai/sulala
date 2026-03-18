@@ -55,6 +55,7 @@ import { parseAgentConfig, type AgentConfig } from "./types/agent.js";
 import { readSkillConfig, writeSkillConfig } from "./core/config.js";
 import { startWorkers, startScheduler } from "./core/tasks.js";
 import { subscribe, type Event, type EventType } from "./core/events.js";
+import { initScheduleReports } from "./core/schedule-reports.js";
 import { listGraphs, loadGraph, saveGraph, deleteGraph } from "./core/graphs.js";
 import { loadPlugins } from "./core/plugins.js";
 import { listSkills, getSkillConfigSchema, getSkillSetupMarkdown, getSkillMarketplace, getStoreRegistry, uninstallSkill, installSystemSkills } from "./skills/loader.js";
@@ -210,6 +211,7 @@ function serveDashboard(pathname: string): Response | null {
 for (const type of EVENT_TYPES) {
   subscribe(type, broadcastEvent);
 }
+initScheduleReports();
 
 function createRoutes(): Record<string, unknown> {
   return {
@@ -244,6 +246,7 @@ function createRoutes(): Record<string, unknown> {
             schedule: a.schedule ?? null,
             schedule_input: a.schedule_input ?? null,
             schedule_enabled: a.schedule_enabled ?? true,
+            schedule_report_targets: a.schedule_report_targets ?? null,
             skills: a.skills ?? [],
             tools: a.tools ?? [],
             avatar: a.avatar ?? null,
@@ -308,6 +311,7 @@ function createRoutes(): Record<string, unknown> {
             schedule_input: body.schedule_input as string | null | undefined,
             avatar: body.avatar as string | null | undefined,
             schedule_enabled: body.schedule_enabled as boolean | null | undefined,
+            schedule_report_targets: Array.isArray(body.schedule_report_targets) ? (body.schedule_report_targets as AgentConfig["schedule_report_targets"]) : undefined,
           });
           return jsonResponse({
             ok: true,
@@ -322,6 +326,7 @@ function createRoutes(): Record<string, unknown> {
               schedule: agent.schedule ?? null,
               schedule_input: agent.schedule_input ?? null,
               schedule_enabled: agent.schedule_enabled ?? true,
+              schedule_report_targets: agent.schedule_report_targets ?? null,
               avatar: agent.avatar ?? null,
               limits: agent.limits ?? null,
             },
@@ -406,6 +411,7 @@ function createRoutes(): Record<string, unknown> {
           schedule?: string | null;
           schedule_input?: string | null;
           schedule_enabled?: boolean;
+          schedule_report_targets?: Array<{ channel: string; address: string }> | null;
         };
         try {
           body = (await req.json()) as typeof body;
@@ -419,6 +425,14 @@ function createRoutes(): Record<string, unknown> {
           schedule: body.schedule !== undefined ? (body.schedule && String(body.schedule).trim() ? String(body.schedule).trim() : undefined) : existing?.schedule,
           schedule_input: body.schedule_input !== undefined ? (body.schedule_input && String(body.schedule_input).trim() ? String(body.schedule_input).trim() : undefined) : existing?.schedule_input,
           schedule_enabled: body.schedule_enabled !== undefined ? body.schedule_enabled : (existing?.schedule_enabled !== false),
+          schedule_report_targets: body.schedule_report_targets !== undefined
+            ? (Array.isArray(body.schedule_report_targets)
+                ? body.schedule_report_targets
+                    .filter((t): t is { channel: "telegram"; address: string } => t?.channel === "telegram" && typeof t?.address === "string")
+                    .map((t) => ({ channel: "telegram" as const, address: String(t.address).trim() }))
+                    .filter((t) => t.address.length > 0)
+                : undefined)
+            : existing?.schedule_report_targets,
         };
         if (!graph.nodes.length) {
           return jsonResponse({ error: "Graph must have at least one node" }, 400);

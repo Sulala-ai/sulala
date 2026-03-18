@@ -410,11 +410,13 @@ export function AgentsPage({ onNavigate }: { onNavigate?: (p: PageId) => void } 
             onOpenChange={(open) => !open && setEditingScheduleId(null)}
             schedule={agent.schedule}
             scheduleInput={agent.schedule_input}
+            scheduleReportTargets={agent.schedule_report_targets ?? undefined}
             title="Edit schedule"
             onSave={async (payload) => {
               await api.updateAgent(editingScheduleId, {
                 schedule: payload.schedule,
                 schedule_input: payload.schedule_input,
+                schedule_report_targets: payload.schedule_report_targets ?? null,
               });
               await loadAgents();
             }}

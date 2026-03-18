@@ -144,6 +144,12 @@ async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/** Schedule report target (e.g. Telegram chat). */
+export interface ScheduleReportTarget {
+  channel: "telegram";
+  address: string;
+}
+
 export interface AgentSummary {
   id: string;
   name: string;
@@ -154,6 +160,8 @@ export interface AgentSummary {
   schedule_input?: string | null;
   /** When false, cron for this agent is paused. */
   schedule_enabled?: boolean;
+  /** Send schedule run report to these targets (e.g. Telegram chat ID). */
+  schedule_report_targets?: ScheduleReportTarget[] | null;
   skills?: string[];
   tools?: string[];
   /** Avatar filename (e.g. agent1.jpg) from public/media. */
@@ -263,6 +271,7 @@ export const api = {
       schedule_input?: string | null;
       avatar?: string | null;
       schedule_enabled?: boolean | null;
+      schedule_report_targets?: ScheduleReportTarget[] | null;
     }
   ): Promise<{
     ok: boolean;
@@ -610,6 +619,8 @@ export const api = {
     has_openrouter_key?: boolean;
     telegram_configured?: boolean;
     telegram_default_agent_id?: string | null;
+    /** Chat ID set via /set_report_chat for "Use channel from Settings" in schedule reports. */
+    telegram_report_chat_id?: string | null;
     slack_configured?: boolean;
     slack_default_agent_id?: string | null;
     discord_configured?: boolean;
@@ -1004,4 +1015,6 @@ export interface Graph {
   schedule?: string | null;
   schedule_input?: string | null;
   schedule_enabled?: boolean;
+  /** Send schedule run report to these targets (e.g. Telegram chat ID). */
+  schedule_report_targets?: ScheduleReportTarget[] | null;
 }

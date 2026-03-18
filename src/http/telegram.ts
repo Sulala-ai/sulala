@@ -3,7 +3,7 @@
  * agent with conversation history per chat, and sends the reply back via Bot API.
  */
 
-import { readConfig } from "../core/config.js";
+import { readConfig, writeConfig } from "../core/config.js";
 import type { MemoryStore } from "../db/memory-store.js";
 import { jsonResponse, errorMessage, parseJsonBody } from "./utils.js";
 import { runAgentWithConversation, getDefaultAgent } from "./channel-run.js";
@@ -110,6 +110,12 @@ export async function processTelegramUpdate(
   const config = await readConfig();
   const botToken = config.telegram_bot_token?.trim();
   if (!botToken) return;
+
+  if (text === "/set_report_chat" || text === "/setreportchat") {
+    await writeConfig({ telegram_report_chat_id: String(chatId) });
+    await sendTelegramMessage(botToken, chatId, "✓ This chat will receive schedule reports. You can change it anytime by sending /set_report_chat from another chat.");
+    return;
+  }
 
   const agent = await getDefaultAgent(config, "telegram_default_agent_id");
   if (!agent) {

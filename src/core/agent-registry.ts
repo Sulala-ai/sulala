@@ -212,6 +212,7 @@ export interface AgentUpdate {
   schedule_input?: string | null;
   avatar?: string | null;
   schedule_enabled?: boolean | null;
+  schedule_report_targets?: AgentConfig["schedule_report_targets"] | null;
 }
 
 export async function updateAgent(id: string, updates: AgentUpdate): Promise<AgentConfig> {
@@ -258,6 +259,9 @@ export async function updateAgent(id: string, updates: AgentUpdate): Promise<Age
   }
   if (updates.schedule_enabled !== undefined && updates.schedule_enabled !== null) {
     parsed.schedule_enabled = updates.schedule_enabled;
+  }
+  if (updates.schedule_report_targets !== undefined) {
+    parsed.schedule_report_targets = updates.schedule_report_targets ?? undefined;
   }
   const agent = parseAgentConfig(parsed);
   await writeFile(path, JSON.stringify(parsed, null, 2), "utf-8");

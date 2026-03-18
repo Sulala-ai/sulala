@@ -414,6 +414,7 @@ export function GraphsPage() {
           onOpenChange={(open) => !open && setEditingScheduleId(null)}
           schedule={graphDetails[editingScheduleId]!.schedule}
           scheduleInput={graphDetails[editingScheduleId]!.schedule_input}
+          scheduleReportTargets={graphDetails[editingScheduleId]!.schedule_report_targets ?? undefined}
           title="Edit schedule"
           onSave={async (payload) => {
             const full = await api.getGraph(editingScheduleId)
@@ -422,6 +423,7 @@ export function GraphsPage() {
               schedule: payload.schedule ?? undefined,
               schedule_input: payload.schedule_input ?? undefined,
               schedule_enabled: true,
+              schedule_report_targets: payload.schedule_report_targets ?? undefined,
             }
             await api.saveGraph(updated)
             setGraphDetails((prev) => ({ ...prev, [editingScheduleId]: updated }))

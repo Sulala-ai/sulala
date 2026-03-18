@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { api, type AgentSummary, type TaskItem, type Graph } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Pause, Play, MessageCircle, CalendarClock, GitBranch, ExternalLink, PlayCircle } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Pause, Play, MessageCircle, CalendarClock, GitBranch, ExternalLink, PlayCircle, History } from "lucide-react";
 import { useChatNav } from "@/features/chat";
 import { toast } from "sonner";
 import type { PageId } from "@/components/app-sidebar";
@@ -42,6 +43,70 @@ function formatRelativeTime(iso: string): string {
   return d.toLocaleDateString();
 }
 
+function formatDateTime(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleString(undefined, { dateStyle: "short", timeStyle: "medium" });
+}
+
+/** Expandable run log row for one task in history. */
+function TaskHistoryRow({ task }: { task: TaskItem }) {
+  const [expanded, setExpanded] = useState(false);
+  const hasLog = Boolean(
+    task.result?.output?.trim() || task.result?.error?.trim()
+  );
+  const statusColor =
+    task.status === "completed"
+      ? "text-green-600 dark:text-green-400"
+      : task.status === "failed"
+        ? "text-destructive"
+        : "text-muted-foreground";
+  return (
+    <div className="rounded-lg border border-border/80 bg-muted/20 overflow-hidden">
+      <button
+        type="button"
+        className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-muted/40 transition-colors"
+        onClick={() => setExpanded((e) => !e)}
+      >
+        <span className="text-sm font-medium">{formatDateTime(task.updated_at)}</span>
+        <span className={`text-sm ${statusColor}`}>
+          {task.status === "running" ? "Running…" : task.status === "completed" ? "Completed" : task.status === "failed" ? "Failed" : task.status}
+        </span>
+      </button>
+      {expanded && (
+        <div className="px-3 pb-3 pt-0 space-y-2 border-t border-border/80">
+          {task.input?.trim() && (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-0.5">Input</p>
+              <pre className="text-xs bg-background/80 rounded p-2 overflow-x-auto whitespace-pre-wrap break-words max-h-24 overflow-y-auto">
+                {task.input}
+              </pre>
+            </div>
+          )}
+          {task.result?.error?.trim() && (
+            <div>
+              <p className="text-xs font-medium text-destructive mb-0.5">Error</p>
+              <pre className="text-xs bg-destructive/10 rounded p-2 overflow-x-auto whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
+                {task.result.error}
+              </pre>
+            </div>
+          )}
+          {task.result?.output?.trim() && (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-0.5">Output</p>
+              <pre className="text-xs bg-background/80 rounded p-2 overflow-x-auto whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
+                {task.result.output}
+              </pre>
+            </div>
+          )}
+          {!hasLog && task.status !== "running" && (
+            <p className="text-xs text-muted-foreground">No output captured.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SchedulesPage({ onNavigate }: { onNavigate?: (page: PageId) => void }) {
   const { openChatWithAgent } = useChatNav();
   const [agents, setAgents] = useState<AgentSummary[]>([]);
@@ -52,6 +117,9 @@ export function SchedulesPage({ onNavigate }: { onNavigate?: (page: PageId) => v
   const [error, setError] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [togglingGraphId, setTogglingGraphId] = useState<string | null>(null);
+  const [historyFor, setHistoryFor] = useState<{ type: "agent" | "graph"; id: string; name: string } | null>(null);
+  const [historyTasks, setHistoryTasks] = useState<TaskItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   function loadAgents() {
     return api.getAgents().then((r) => setAgents(r.agents)).catch((e) => setError(e.message));
@@ -112,6 +180,18 @@ export function SchedulesPage({ onNavigate }: { onNavigate?: (page: PageId) => v
 
   const scheduledAgents = agents.filter((a) => a.schedule?.trim());
   const scheduledGraphs = graphs.filter((g) => g.schedule?.trim());
+
+  function openHistory(type: "agent" | "graph", id: string, name: string) {
+    setHistoryFor({ type, id, name });
+    setHistoryTasks([]);
+    setHistoryLoading(true);
+    const params = type === "agent" ? { agent_id: id, limit: 50 } : { graph_id: id, limit: 50 };
+    api
+      .getTasks(params)
+      .then(({ tasks }) => setHistoryTasks(tasks.sort((a, b) => b.updated_at.localeCompare(a.updated_at))))
+      .catch(() => setHistoryTasks([]))
+      .finally(() => setHistoryLoading(false));
+  }
 
   if (loading) return <div className="p-4 text-muted-foreground">Loading…</div>;
   if (error) return <div className="p-4 text-destructive">Failed to load: {error}</div>;
@@ -196,6 +276,15 @@ export function SchedulesPage({ onNavigate }: { onNavigate?: (page: PageId) => v
                         >
                           <MessageCircle className="size-4" />
                           Chat
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => openHistory("agent", a.id, a.name)}
+                          className="gap-1"
+                        >
+                          <History className="size-4" />
+                          Show history
                         </Button>
                       </div>
                     </div>
@@ -305,6 +394,15 @@ export function SchedulesPage({ onNavigate }: { onNavigate?: (page: PageId) => v
                           <PlayCircle className="size-4" />
                           Run now
                         </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => openHistory("graph", g.id, g.id)}
+                          className="gap-1"
+                        >
+                          <History className="size-4" />
+                          Show history
+                        </Button>
                         {onNavigate && (
                           <Button
                             size="sm"
@@ -346,6 +444,23 @@ export function SchedulesPage({ onNavigate }: { onNavigate?: (page: PageId) => v
           )}
         </CardContent>
       </Card>
+
+      <Sheet open={!!historyFor} onOpenChange={(open) => !open && setHistoryFor(null)}>
+        <SheetContent className="flex flex-col w-full sm:max-w-lg overflow-hidden">
+          <SheetHeader>
+            <SheetTitle>Run history — {historyFor?.name ?? ""}</SheetTitle>
+          </SheetHeader>
+          <div className="flex-1 overflow-y-auto min-h-0 space-y-2 pr-2">
+            {historyLoading ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : historyTasks.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No runs yet.</p>
+            ) : (
+              historyTasks.map((task) => <TaskHistoryRow key={task.id} task={task} />)
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

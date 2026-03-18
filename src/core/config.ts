@@ -46,6 +46,8 @@ export interface AgentOsConfig {
   telegram_bot_token?: string;
   /** Agent id to use for Telegram chats when no other agent is specified. */
   telegram_default_agent_id?: string;
+  /** Chat ID to send schedule reports to when user selects "Use channel from Settings". Set by sending /set_report_chat to the bot. */
+  telegram_report_chat_id?: string;
   /** Slack bot token (xoxb-...). When set, webhook at /api/channels/slack/webhook can receive events. */
   slack_bot_token?: string;
   /** Slack signing secret (from app Basic Info). Used to verify request signatures. */
@@ -176,6 +178,7 @@ export async function readConfig(): Promise<AgentOsConfig> {
       const openrouter_api_key = o.openrouter_api_key;
       const telegram_bot_token = o.telegram_bot_token;
       const telegram_default_agent_id = o.telegram_default_agent_id;
+      const telegram_report_chat_id = o.telegram_report_chat_id;
       const slack_bot_token = o.slack_bot_token;
       const slack_signing_secret = o.slack_signing_secret;
       const slack_default_agent_id = o.slack_default_agent_id;
@@ -201,6 +204,7 @@ export async function readConfig(): Promise<AgentOsConfig> {
         openrouter_api_key: typeof openrouter_api_key === "string" ? openrouter_api_key : undefined,
         telegram_bot_token: typeof telegram_bot_token === "string" ? telegram_bot_token : undefined,
         telegram_default_agent_id: typeof telegram_default_agent_id === "string" ? telegram_default_agent_id : undefined,
+        telegram_report_chat_id: typeof telegram_report_chat_id === "string" ? telegram_report_chat_id.trim() || undefined : undefined,
         slack_bot_token: typeof slack_bot_token === "string" ? slack_bot_token : undefined,
         slack_signing_secret: typeof slack_signing_secret === "string" ? slack_signing_secret : undefined,
         slack_default_agent_id: typeof slack_default_agent_id === "string" ? slack_default_agent_id : undefined,
@@ -268,6 +272,7 @@ export async function writeConfig(updates: Partial<AgentOsConfig>): Promise<void
     openrouter_api_key: updates.openrouter_api_key !== undefined ? updates.openrouter_api_key : current.openrouter_api_key,
     telegram_bot_token: updates.telegram_bot_token !== undefined ? updates.telegram_bot_token : current.telegram_bot_token,
     telegram_default_agent_id: updates.telegram_default_agent_id !== undefined ? updates.telegram_default_agent_id : current.telegram_default_agent_id,
+    telegram_report_chat_id: updates.telegram_report_chat_id !== undefined ? updates.telegram_report_chat_id : current.telegram_report_chat_id,
     slack_bot_token: updates.slack_bot_token !== undefined ? updates.slack_bot_token : current.slack_bot_token,
     slack_signing_secret: updates.slack_signing_secret !== undefined ? updates.slack_signing_secret : current.slack_signing_secret,
     slack_default_agent_id: updates.slack_default_agent_id !== undefined ? updates.slack_default_agent_id : current.slack_default_agent_id,
@@ -297,6 +302,7 @@ export async function writeConfig(updates: Partial<AgentOsConfig>): Promise<void
         openrouter_api_key: merged.openrouter_api_key ?? null,
         telegram_bot_token: merged.telegram_bot_token ?? null,
         telegram_default_agent_id: merged.telegram_default_agent_id ?? null,
+        telegram_report_chat_id: merged.telegram_report_chat_id ?? null,
         slack_bot_token: merged.slack_bot_token ?? null,
         slack_signing_secret: merged.slack_signing_secret ?? null,
         slack_default_agent_id: merged.slack_default_agent_id ?? null,

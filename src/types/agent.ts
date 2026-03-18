@@ -8,6 +8,13 @@ export interface AgentLimits {
   max_tokens?: number;
 }
 
+/** Where to send a report when a scheduled run completes (e.g. Telegram chat). */
+export interface ScheduleReportTarget {
+  channel: "telegram";
+  /** Telegram chat ID (numeric string or @username). */
+  address: string;
+}
+
 export interface AgentConfig {
   id: string;
   name: string;
@@ -22,6 +29,8 @@ export interface AgentConfig {
   schedule_input?: string;
   /** If false, cron for this agent is paused. Default true when schedule is set. */
   schedule_enabled?: boolean;
+  /** Send schedule run report to these targets (e.g. Telegram chat). */
+  schedule_report_targets?: ScheduleReportTarget[];
   /** Avatar filename (e.g. agent1.jpg) from dashboard public/media. Shown in UI; assign randomly on create if omitted. */
   avatar?: string;
   /** True when created via the dashboard; such agents can be deleted. Default/bundled agents omit this. */
@@ -75,6 +84,12 @@ export function validateAgentConfig(raw: unknown): AgentConfig {
     config.schedule_enabled = false;
   } else if (obj.schedule_enabled === true) {
     config.schedule_enabled = true;
+  }
+  if (Array.isArray(obj.schedule_report_targets)) {
+    config.schedule_report_targets = obj.schedule_report_targets.filter(
+      (t): t is ScheduleReportTarget =>
+        t && typeof t === "object" && (t as Record<string, unknown>).channel === "telegram" && typeof (t as Record<string, unknown>).address === "string" && String((t as Record<string, unknown>).address).trim() !== ""
+    ).map((t) => ({ channel: "telegram" as const, address: String((t as Record<string, unknown>).address).trim() }));
   }
   if (obj.avatar != null && typeof obj.avatar === 'string' && obj.avatar.trim()) {
     config.avatar = (obj.avatar as string).trim();

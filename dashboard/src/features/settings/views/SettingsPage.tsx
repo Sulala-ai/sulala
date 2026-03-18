@@ -146,6 +146,7 @@ function SettingsTelegram() {
   const [setupDocOpen, setSetupDocOpen] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [testing, setTesting] = useState(false)
+  const [telegramReportChatId, setTelegramReportChatId] = useState<string | null>(null)
 
   function loadStatus() {
     api.getTelegramStatus().then(setStatus).catch(() => setStatus(null))
@@ -156,6 +157,7 @@ function SettingsTelegram() {
       .then(([settings, agentsRes]) => {
         setTelegramConfigured(Boolean(settings.telegram_configured))
         setDefaultAgentId(settings.telegram_default_agent_id ?? "")
+        setTelegramReportChatId(settings.telegram_report_chat_id ?? null)
         setAgents(agentsRes.agents.map((a) => ({ id: a.id, name: a.name })))
         if (!settings.telegram_configured) setBotToken("")
       })
@@ -261,6 +263,15 @@ function SettingsTelegram() {
                 ))}
               </select>
               <p className="text-xs text-muted-foreground">Agent that will reply to Telegram messages.</p>
+            </div>
+            <div className="rounded-lg border border-border/80 bg-muted/20 p-3 space-y-1">
+              <p className="text-sm font-medium">Schedule reports</p>
+              <p className="text-xs text-muted-foreground">
+                To send schedule run reports to a Telegram chat without knowing your chat ID: open a chat with your bot and send <code className="rounded bg-muted px-1">/set_report_chat</code>. That chat will then be used when you choose &quot;Use channel from Settings&quot; in an agent or graph schedule.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Current report chat: {telegramReportChatId ? <span className="font-mono">{telegramReportChatId}</span> : "Not set"}
+              </p>
             </div>
             <div className="space-y-2">
               <Button type="button" variant="ghost" size="sm" className="px-0 text-muted-foreground" onClick={() => setShowAdvanced(!showAdvanced)}>

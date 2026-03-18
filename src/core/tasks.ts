@@ -26,6 +26,8 @@ export interface Task {
   status: TaskStatus;
   created_at: string;
   updated_at: string;
+  /** True when this task was enqueued by the scheduler (cron). Used for report delivery. */
+  scheduled_run?: boolean;
   result?: {
     success: boolean;
     output: string;
@@ -265,7 +267,7 @@ export async function getTaskById(id: string): Promise<Task | undefined> {
   return task ?? undefined;
 }
 
-export async function enqueueTask(agent_id: string, input: string): Promise<Task> {
+export async function enqueueTask(agent_id: string, input: string, scheduled_run = false): Promise<Task> {
   const id = randomUUID();
   const t: Task = {
     id,
@@ -274,12 +276,13 @@ export async function enqueueTask(agent_id: string, input: string): Promise<Task
     status: "queued",
     created_at: nowIso(),
     updated_at: nowIso(),
+    ...(scheduled_run && { scheduled_run: true }),
   };
   await memoryTaskStore.enqueue(t);
   return t;
 }
 
-export async function enqueueGraphTask(graph_id: string, input: string): Promise<Task> {
+export async function enqueueGraphTask(graph_id: string, input: string, scheduled_run = false): Promise<Task> {
   const id = randomUUID();
   const t: Task = {
     id,
@@ -288,6 +291,7 @@ export async function enqueueGraphTask(graph_id: string, input: string): Promise
     status: "queued",
     created_at: nowIso(),
     updated_at: nowIso(),
+    ...(scheduled_run && { scheduled_run: true }),
   };
   await memoryTaskStore.enqueue(t);
   return t;
@@ -312,7 +316,7 @@ export function startScheduler(store: TaskStore = memoryTaskStore): void {
           const current = await loadAgents();
           const a = current.find((x) => x.id === agentId);
           const input = a?.schedule_input?.trim() || "Scheduled run";
-          await enqueueTask(agentId, input);
+          await enqueueTask(agentId, input, true);
         });
       }
       const graphSummaries = await listGraphs();
@@ -323,7 +327,7 @@ export function startScheduler(store: TaskStore = memoryTaskStore): void {
         cron.schedule(graph.schedule, async () => {
           const g = await loadGraph(gid);
           const input = g?.schedule_input?.trim() || "Scheduled run";
-          await enqueueGraphTask(gid, input);
+          await enqueueGraphTask(gid, input, true);
         });
       }
     } catch (err) {

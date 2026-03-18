@@ -5,15 +5,15 @@ export type PromptGateMode =
 export type PromptGateDecision =
   | { decision: "allow"; normalized_input?: string }
   | {
-      decision: "needs_clarification";
-      reason: string;
-      /** A structured template the UI can show (user fills + resubmits). */
-      template: string;
-      /** Suggested safe prompts the user can click. */
-      suggestions?: Array<{ id: string; title: string; prompt: string }>;
-      /** Optional short questions for lightweight UIs. */
-      questions?: Array<{ id: string; prompt: string; example?: string }>;
-    };
+    decision: "needs_clarification";
+    reason: string;
+    /** A structured template the UI can show (user fills + resubmits). */
+    template: string;
+    /** Suggested safe prompts the user can click. */
+    suggestions?: Array<{ id: string; title: string; prompt: string }>;
+    /** Optional short questions for lightweight UIs. */
+    questions?: Array<{ id: string; prompt: string; example?: string }>;
+  };
 
 function looksLikeOnlyUrl(text: string): boolean {
   const t = text.trim();
@@ -66,23 +66,23 @@ function genericSuggestions(text: string): Array<{ id: string; title: string; pr
     },
     ...(wantsWeb
       ? [
-          {
-            id: "thorough_bounded",
-            title: "Thorough (bounded)",
-            prompt:
-              "Use up to 3 sources/pages max.\nStop once you have enough for ONE high-confidence answer.\nReturn strict JSON only.\nIf any source is blocked, skip it.",
-          },
-        ]
+        {
+          id: "thorough_bounded",
+          title: "Thorough (bounded)",
+          prompt:
+            "Use up to 3 sources/pages max.\nStop once you have enough for ONE high-confidence answer.\nReturn strict JSON only.\nIf any source is blocked, skip it.",
+        },
+      ]
       : []),
     ...(wantsCrm
       ? [
-          {
-            id: "action_only_no_research",
-            title: "Action-only (no research)",
-            prompt:
-              "Do NOT browse the web.\nIf required info is missing, ask for it first.\nThen perform the action.\nIf the action fails, return the JSON payload you would write.",
-          },
-        ]
+        {
+          id: "action_only_no_research",
+          title: "Action-only (no research)",
+          prompt:
+            "Do NOT browse the web.\nIf required info is missing, ask for it first.\nThen perform the action.\nIf the action fails, return the JSON payload you would write.",
+        },
+      ]
       : []),
   ];
 }

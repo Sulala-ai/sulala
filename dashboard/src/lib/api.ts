@@ -4,7 +4,7 @@
  * will send the token on all requests and clear it on 401.
  */
 
-const BASE = import.meta.env.VITE_AGENT_OS_API ?? "http://0.0.0.0:3010";
+const BASE = import.meta.env.VITE_AGENT_OS_API ?? "http://127.0.0.1:3010";
 
 const DASHBOARD_TOKEN_KEY = "agent_os_dashboard_token";
 
@@ -853,7 +853,7 @@ export const api = {
   async uploadSkill(file: File): Promise<{ skill: { id: string } }> {
     const formData = new FormData();
     formData.set("file", file);
-    const base = import.meta.env.VITE_AGENT_OS_API ?? "http://0.0.0.0:3010";
+    const base = import.meta.env.VITE_AGENT_OS_API ?? "http://127.0.0.1:3010";
     const res = await fetch(`${base}/api/skills/upload`, {
       method: "POST",
       headers: authHeaders(),
@@ -868,7 +868,7 @@ export const api = {
     const formData = new FormData();
     formData.set("file", file);
     if (id?.trim()) formData.set("id", id.trim());
-    const base = import.meta.env.VITE_AGENT_OS_API ?? "http://0.0.0.0:3010";
+    const base = import.meta.env.VITE_AGENT_OS_API ?? "http://127.0.0.1:3010";
     const res = await fetch(`${base}/api/skills/upload-skill-md`, {
       method: "POST",
       headers: authHeaders(),
@@ -884,7 +884,7 @@ export const api = {
   },
 
   async getSkillConfigSchema(skillId: string): Promise<Record<string, unknown> | null> {
-    const base = import.meta.env.VITE_AGENT_OS_API ?? "http://0.0.0.0:3010";
+    const base = import.meta.env.VITE_AGENT_OS_API ?? "http://127.0.0.1:3010";
     const res = await fetch(`${base}/api/skills/${encodeURIComponent(skillId)}/config/schema`, {
       headers: authHeaders(),
     });

@@ -11,7 +11,7 @@ import { LogsPage } from "@/features/logs"
 import { AiProviderForm } from "@/features/settings/components/AiProviderForm"
 import { cn } from "@/lib/utils"
 
-const BASE = import.meta.env.VITE_AGENT_OS_API ?? "http://0.0.0.0:3010"
+const BASE = import.meta.env.VITE_AGENT_OS_API ?? "http://127.0.0.1:3010"
 
 type SettingsSection = "dashboard_access" | "ai_provider" | "channels" | "telegram" | "slack" | "discord" | "signal" | "viber" | "tasks" | "logs"
 

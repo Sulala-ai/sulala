@@ -6,11 +6,11 @@ Lightweight **Bun-based Agent Operating System** for **graph-based, collaborativ
 
 | Agents | Skills | Schedules |
 | ------ | ------ | --------- |
-| ![Agents](docs/media/agents.png) | ![Skills](docs/media/skill.png) | ![Schedules](docs/media/schedule.png) |
+| ![Agents](https://raw.githubusercontent.com/Sulala-ai/sulala/main/docs/media/agents.png) | ![Skills](https://raw.githubusercontent.com/Sulala-ai/sulala/main/docs/media/skill.png) | ![Schedules](https://raw.githubusercontent.com/Sulala-ai/sulala/main/docs/media/schedule.png) |
 | Graphs | Graph agent | Graphs (chat) |
-| ![Graphs](docs/media/graphs.png) | ![Graph agent](docs/media/graph_agent.png) | ![Graphs chat](docs/media/graphs_chat.png) |
+| ![Graphs](https://raw.githubusercontent.com/Sulala-ai/sulala/main/docs/media/graphs.png) | ![Graph agent](https://raw.githubusercontent.com/Sulala-ai/sulala/main/docs/media/graph_agent.png) | ![Graphs chat](https://raw.githubusercontent.com/Sulala-ai/sulala/main/docs/media/graphs_chat.png) |
 | Agent chat | Agent (social media) | Memory |
-| ![Agent chat](docs/media/agent_chat.png) | ![Agent social media](docs/media/agent_social_media.png) | ![Memory](docs/media/memory.png) |
+| ![Agent chat](https://raw.githubusercontent.com/Sulala-ai/sulala/main/docs/media/agent_chat.png) | ![Agent social media](https://raw.githubusercontent.com/Sulala-ai/sulala/main/docs/media/agent_social_media.png) | ![Memory](https://raw.githubusercontent.com/Sulala-ai/sulala/main/docs/media/memory.png) |
 
 ## How lightweight is Sulala?
 

@@ -11,6 +11,10 @@ Lightweight **Bun-based Agent Operating System** for **graph-based, collaborativ
 | ![Graphs](https://raw.githubusercontent.com/Sulala-ai/sulala/main/docs/media/graphs.png) | ![Graph agent](https://raw.githubusercontent.com/Sulala-ai/sulala/main/docs/media/graph_agent.png) | ![Graphs chat](https://raw.githubusercontent.com/Sulala-ai/sulala/main/docs/media/graphs_chat.png) |
 | Agent chat | Agent (social media) | Memory |
 | ![Agent chat](https://raw.githubusercontent.com/Sulala-ai/sulala/main/docs/media/agent_chat.png) | ![Agent social media](https://raw.githubusercontent.com/Sulala-ai/sulala/main/docs/media/agent_social_media.png) | ![Memory](https://raw.githubusercontent.com/Sulala-ai/sulala/main/docs/media/memory.png) |
+| Dashboard access | Channels | Settings |
+| ![Dashboard access](docs/media/auth.png) | ![Channels](docs/media/channel.png) | ![Settings](docs/media/setting.png) |
+| Tasks | | |
+| ![Tasks](docs/media/tasks.png) | | |
 
 ## How lightweight is Sulala?
 

@@ -34,22 +34,42 @@ const DEFAULT_SYSTEM_SKILL_IDS = ["memory", "date", "fetch", "jq", "file-search"
 /** Meta file written when installing from hub so we know version without relying on SKILL.md frontmatter. */
 const SULALA_META_FILE = ".sulala-meta.json";
 
-async function readSkillMeta(skillDir: string, subEntries: string[]): Promise<{ version?: string } | null> {
+export interface SulalaSkillMeta {
+  version?: string;
+  source?: string;
+  /** Logo URL from store; persisted so Installed tab can show it without re-fetching registry. */
+  logo?: string;
+  /** Category from store. */
+  category?: string;
+}
+
+async function readSkillMeta(skillDir: string, subEntries: string[]): Promise<SulalaSkillMeta | null> {
   if (!subEntries.includes(SULALA_META_FILE)) return null;
   try {
     const raw = await readFile(join(skillDir, SULALA_META_FILE), "utf-8");
-    const data = JSON.parse(raw) as { version?: string };
-    return typeof data.version === "string" && data.version.trim() !== "" ? { version: data.version.trim() } : null;
+    const data = JSON.parse(raw) as Record<string, unknown>;
+    if (!data || typeof data !== "object") return null;
+    const version = typeof data.version === "string" && data.version.trim() !== "" ? data.version.trim() : undefined;
+    const source = typeof data.source === "string" && data.source.trim() !== "" ? data.source.trim() : undefined;
+    const logo = typeof data.logo === "string" && data.logo.trim() !== "" ? data.logo.trim() : undefined;
+    const category = typeof data.category === "string" && data.category.trim() !== "" ? data.category.trim() : undefined;
+    if (version === undefined && source === undefined && logo === undefined && category === undefined) return null;
+    return { version, source, logo, category };
   } catch {
     return null;
   }
 }
 
-async function writeSkillMeta(skillId: string, meta: { version?: string; source?: string }): Promise<void> {
+async function writeSkillMeta(
+  skillId: string,
+  meta: { version?: string; source?: string; logo?: string; category?: string }
+): Promise<void> {
   const skillDir = join(getSkillsDir(), skillId);
   const payload: Record<string, string> = {};
   if (meta.version?.trim()) payload.version = meta.version.trim();
   if (meta.source?.trim()) payload.source = meta.source.trim();
+  if (meta.logo?.trim()) payload.logo = meta.logo.trim();
+  if (meta.category?.trim()) payload.category = meta.category.trim();
   if (Object.keys(payload).length === 0) return;
   await writeFile(join(skillDir, SULALA_META_FILE), JSON.stringify(payload, null, 0), "utf-8");
 }
@@ -174,6 +194,10 @@ export interface SkillSummary {
   tools: Array<{ id: string; description?: string }>;
   required_env?: string[];
   system?: boolean;
+  /** From .sulala-meta.json when installed from store. */
+  logo?: string;
+  /** From .sulala-meta.json when installed from store. */
+  category?: string;
 }
 
 export async function getSkillConfigSchema(skillId: string): Promise<Record<string, unknown> | null> {
@@ -240,6 +264,8 @@ export interface StoreRegistrySkill {
   category?: string;
   tags?: string[];
   featured?: boolean;
+  /** Logo/icon URL from registry (iconUrl or logo). */
+  logo?: string;
 }
 
 export async function getStoreRegistry(): Promise<{
@@ -273,6 +299,7 @@ export async function getStoreRegistry(): Promise<{
         const slug = String(e.slug);
         const downloadUrlFromStore = typeof e.downloadUrl === "string" ? e.downloadUrl : undefined;
         const downloadUrl = downloadUrlFromStore ?? (storeBase ? `${storeBase}/api/sulalahub/skills/${encodeURIComponent(slug)}/download` : undefined);
+        const logo = typeof e.iconUrl === "string" ? e.iconUrl : typeof e.logo === "string" ? e.logo : undefined;
         return {
           slug,
           name: typeof e.name === "string" ? e.name : slug,
@@ -284,6 +311,7 @@ export async function getStoreRegistry(): Promise<{
           category: typeof e.category === "string" ? e.category : undefined,
           tags: Array.isArray(e.tags) ? (e.tags as string[]) : undefined,
           featured: e.featured === true,
+          logo: logo?.trim() || undefined,
         };
       });
     return { skills, storeBase, registryUrl };
@@ -360,6 +388,8 @@ export async function listSkills(): Promise<SkillSummary[]> {
       tools: (doc.tools ?? []).map((t) => ({ id: t.id, description: t.description })),
       required_env: requiredEnv.length ? requiredEnv : undefined,
       system: SYSTEM_SKILL_IDS.has(name),
+      logo: meta?.logo,
+      category: meta?.category,
     });
   }
   return results;
@@ -427,7 +457,7 @@ export async function installSystemSkills(): Promise<{ installed: number }> {
 export async function installSkillFromUrl(
   url: string,
   explicitId?: string,
-  meta?: { version?: string; source?: string }
+  meta?: { version?: string; source?: string; logo?: string; category?: string }
 ): Promise<{ id: string }> {
   const urlLower = url.toLowerCase();
   const isStoreSkillContentUrl =
@@ -471,8 +501,18 @@ export async function installSkillFromUrl(
       destId = explicitId != null && explicitId.trim() !== "" ? slugToSkillId(explicitId) : id;
       await cp(sourcePath, join(skillsDir, destId), { recursive: true });
     }
-    if (meta?.version?.trim() || meta?.source?.trim()) {
-      await writeSkillMeta(destId, { version: meta.version, source: meta.source ?? (explicitId ? "hub" : undefined) });
+    if (
+      meta?.version?.trim() ||
+      meta?.source?.trim() ||
+      meta?.logo?.trim() ||
+      meta?.category?.trim()
+    ) {
+      await writeSkillMeta(destId, {
+        version: meta.version,
+        source: meta.source ?? (explicitId ? "hub" : undefined),
+        logo: meta.logo,
+        category: meta.category,
+      });
     }
     return { id: destId };
   } finally {

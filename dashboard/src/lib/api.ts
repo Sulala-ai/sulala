@@ -944,6 +944,10 @@ export interface SkillSummary {
   required_env?: string[];
   /** True when system-provided; user cannot uninstall. */
   system?: boolean;
+  /** Optional logo/icon URL. When missing, dashboard shows default Sulala logo. */
+  logo?: string;
+  /** Optional category (e.g. from store or SKILL.md). */
+  category?: string;
 }
 
 export interface MarketplaceEntry {
@@ -968,6 +972,8 @@ export interface StoreRegistrySkill {
   category?: string;
   tags?: string[];
   featured?: boolean;
+  /** Optional logo/icon URL. When missing, dashboard shows default Sulala logo. */
+  logo?: string;
 }
 
 /** Payload for installSkill. Use url with the store's downloadUrl (ZIP) for store skills; agent fetches, unzips, installs to ~/.agent-os/skills. */
@@ -979,6 +985,10 @@ export interface InstallSkillPayload {
   slug?: string;
   /** Store version; agent writes it to .sulala-meta.json so "Update" comparison works. */
   version?: string;
+  /** Store logo URL; agent writes to .sulala-meta.json so Installed tab shows it. */
+  logo?: string;
+  /** Store category; agent writes to .sulala-meta.json. */
+  category?: string;
 }
 
 export interface GraphRunResult {

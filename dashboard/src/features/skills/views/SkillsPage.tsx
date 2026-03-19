@@ -345,6 +345,26 @@ export function SkillsPage() {
 
   const skillColumns = useMemo<ColumnDef<SkillSummary>[]>(() => [
     {
+      id: "logo",
+      header: "",
+      cell: ({ row }) => {
+        const logo = row.original.logo
+        if (logo?.trim()) {
+          return (
+            <span className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-background">
+              <img src={logo} alt="" className="size-5 object-contain" />
+            </span>
+          )
+        }
+        return (
+          <span className="relative flex size-8 shrink-0 items-center justify-center rounded border border-border bg-muted/50">
+            <img src="/logo_dark.png" alt="" className="size-5 object-contain dark:hidden" />
+            <img src="/logo_white.png" alt="" className="hidden size-5 object-contain dark:block" />
+          </span>
+        )
+      },
+    },
+    {
       accessorKey: "name",
       header: "Name",
       cell: ({ row }) => (
@@ -355,6 +375,11 @@ export function SkillsPage() {
       ),
     },
     { accessorKey: "id", header: "ID", cell: ({ row }) => <span className="font-mono text-xs text-muted-foreground">{row.original.id}</span> },
+    {
+      id: "category",
+      header: "Category",
+      cell: ({ row }) => <span className="text-muted-foreground text-sm">{row.original.category?.trim() ?? "—"}</span>,
+    },
     {
       accessorKey: "description",
       header: "Description",
@@ -412,6 +437,8 @@ export function SkillsPage() {
                         url: storeSkill.downloadUrl,
                         slug: storeSkill.slug,
                         version: storeSkill.version,
+                        logo: storeSkill.logo,
+                        category: storeSkill.category,
                       })
                       toast.success(`Updated: ${skill.id}`)
                       load()
@@ -682,6 +709,8 @@ export function SkillsPage() {
                                 url: s.downloadUrl!,
                                 slug: s.slug,
                                 version: s.version,
+                                logo: s.logo,
+                                category: s.category,
                               })
                               ok++
                             } catch {
@@ -715,7 +744,7 @@ export function SkillsPage() {
                       <TableHeader>
                         <TableRow>
                           <TableHead className="w-10">
-                            <input
+                              <input
                               ref={discoverSelectAllRef}
                               type="checkbox"
                               aria-label="Select all on page"
@@ -735,7 +764,9 @@ export function SkillsPage() {
                               className="rounded border-input"
                             />
                           </TableHead>
+                          <TableHead className="w-12"></TableHead>
                           <TableHead>Name</TableHead>
+                          <TableHead>Category</TableHead>
                           <TableHead>Description</TableHead>
                           <TableHead className="w-[100px]">Version</TableHead>
                           <TableHead className="w-[200px]">Actions</TableHead>
@@ -755,6 +786,8 @@ export function SkillsPage() {
                                 url: downloadUrl,
                                 slug: s.slug,
                                 version: s.version,
+                                logo: s.logo,
+                                category: s.category,
                               })
                               toast.success(updateAvailable ? `Updated: ${r.skill.id}` : `Installed: ${r.skill.id}`)
                               load()
@@ -788,7 +821,20 @@ export function SkillsPage() {
                                   className="rounded border-input"
                                 />
                               </TableCell>
+                              <TableCell className="w-12">
+                                {s.logo?.trim() ? (
+                                  <span className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-background">
+                                    <img src={s.logo} alt="" className="size-5 object-contain" />
+                                  </span>
+                                ) : (
+                                  <span className="relative flex size-8 shrink-0 items-center justify-center rounded border border-border bg-muted/50">
+                                    <img src="/logo_dark.png" alt="" className="size-5 object-contain dark:hidden" />
+                                    <img src="/logo_white.png" alt="" className="hidden size-5 object-contain dark:block" />
+                                  </span>
+                                )}
+                              </TableCell>
                               <TableCell className="font-medium">{s.name}</TableCell>
+                              <TableCell className="text-muted-foreground text-sm">{s.category?.trim() ?? "—"}</TableCell>
                               <TableCell className="text-muted-foreground text-sm max-w-[320px] truncate" title={s.description}>
                                 {s.description ?? "—"}
                               </TableCell>

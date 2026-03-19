@@ -375,6 +375,8 @@ async function cmdSkillInstall(args: string[]): Promise<void> {
     const { id } = await installSkillFromUrl(downloadUrl, slug, {
       version: version ?? undefined,
       source: "hub",
+      logo: entry.logo,
+      category: entry.category,
     });
     const verStr = version ? ` (v${version})` : "";
     console.log(`Installed ${id}${verStr}. Add it to your agent in the dashboard (Edit agent → Skills).`);

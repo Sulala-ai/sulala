@@ -291,7 +291,14 @@ export async function handleLogs(req: Request): Promise<Response> {
 }
 
 export async function handleSkillInstall(req: Request): Promise<Response> {
-  const parsed = await parseJsonBody<{ path?: string; url?: string; slug?: string; version?: string }>(req);
+  const parsed = await parseJsonBody<{
+    path?: string;
+    url?: string;
+    slug?: string;
+    version?: string;
+    logo?: string;
+    category?: string;
+  }>(req);
   if (!parsed.ok) return parsed.response;
   const body = parsed.body;
   const hasPath = typeof body.path === "string" && body.path.trim().length > 0;
@@ -304,7 +311,12 @@ export async function handleSkillInstall(req: Request): Promise<Response> {
   }
   const slug = typeof body.slug === "string" && body.slug.trim() !== "" ? body.slug.trim() : undefined;
   const version = typeof body.version === "string" && body.version.trim() !== "" ? body.version.trim() : undefined;
-  const meta = version || slug ? { version, source: slug ? "hub" : undefined } : undefined;
+  const logo = typeof body.logo === "string" && body.logo.trim() !== "" ? body.logo.trim() : undefined;
+  const category = typeof body.category === "string" && body.category.trim() !== "" ? body.category.trim() : undefined;
+  const meta =
+    version || slug || logo || category
+      ? { version, source: slug ? "hub" : undefined, logo, category }
+      : undefined;
   try {
     const result = hasPath
       ? await installSkillFromPath(body.path!.trim())

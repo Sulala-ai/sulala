@@ -1,0 +1,11 @@
+export type SettingsSection =
+  | "dashboard_access"
+  | "ai_provider"
+  | "channels"
+  | "telegram"
+  | "slack"
+  | "discord"
+  | "signal"
+  | "viber"
+  | "tasks"
+  | "logs"

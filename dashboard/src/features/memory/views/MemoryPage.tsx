@@ -1,7 +1,5 @@
  "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { api, type AgentSummary, type MemoryGraphNode, type MemoryGraphEdge } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,16 +9,31 @@ import { cn } from "@/lib/utils";
 import { DotPattern } from "@/components/ui/dot-pattern";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import ForceGraph2D from "react-force-graph-2d";
+import { useMemoryPage } from "@/features/memory/hooks/useMemoryPage";
+import type { MemoryGraphNode } from "@/lib/api";
+import type { MutableRefObject } from "react";
 
-export interface MemoryResult {
-  id: number;
-  user_id: string | null;
-  agent_id: string;
+type MemoryNodeDetails = MemoryGraphNode & {
+  agent_id?: string;
+  label?: string;
+  text?: string;
+  created_at?: string;
+  user_id?: string;
   scope?: string;
-  text: string;
   tags?: unknown;
-  created_at: string;
-}
+};
+
+type GraphCanvasNode = {
+  id?: string | number;
+  label?: string;
+  type?: string;
+  x?: number;
+  y?: number;
+};
+
+type GraphCanvasLink = { type?: string };
+
+type GraphApi = { zoomToFit: (ms?: number) => void };
 
 function formatDate(iso: string): string {
   try {
@@ -31,201 +44,45 @@ function formatDate(iso: string): string {
 }
 
 export function MemoryPage() {
-  const [agents, setAgents] = useState<AgentSummary[]>([]);
-  const [activeTab, setActiveTab] = useState<"list" | "graph">("graph");
-  const [results, setResults] = useState<MemoryResult[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [q, setQ] = useState("");
-  const [agentFilter, setAgentFilter] = useState("");
-  const [semantic, setSemantic] = useState(false);
-  const [addAgentId, setAddAgentId] = useState("");
-  const [addText, setAddText] = useState("");
-  const [addSaving, setAddSaving] = useState(false);
-  const [addError, setAddError] = useState<string | null>(null);
-  const [addSuccess, setAddSuccess] = useState(false);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [graphNodes, setGraphNodes] = useState<MemoryGraphNode[]>([]);
-  const [graphEdges, setGraphEdges] = useState<MemoryGraphEdge[]>([]);
-  const [graphLoading, setGraphLoading] = useState(false);
-  const [graphError, setGraphError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const graphRef = useRef<any>(null);
-  const graphWrapRef = useRef<HTMLDivElement | null>(null);
-  const [graphSize, setGraphSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-
-  const selectedNode = selectedNodeId
-    ? graphNodes.find((n) => n.id === selectedNodeId) ?? null
-    : null;
-
-  const selectedNodeLabel = (() => {
-    if (!selectedNode) return "";
-    if (selectedNode.type === "agent") {
-      const agentId = (selectedNode as any).agent_id as string | undefined;
-      const agent = agentId ? agents.find((a) => a.id === agentId) : undefined;
-      return agent?.name ?? agentId ?? selectedNode.id;
-    }
-    if (selectedNode.type === "tag") return String((selectedNode as any).label ?? selectedNode.id);
-    if (selectedNode.type === "memory") return String((selectedNode as any).label ?? (selectedNode as any).text ?? selectedNode.id);
-    return selectedNode.id;
-  })();
-
-  const selectedConnected = (() => {
-    if (!selectedNode) return { incoming: [] as string[], outgoing: [] as string[] };
-    const incoming = graphEdges.filter((e) => e.to === selectedNode.id).map((e) => e.from);
-    const outgoing = graphEdges.filter((e) => e.from === selectedNode.id).map((e) => e.to);
-    return { incoming, outgoing };
-  })();
-
-  useEffect(() => {
-    api
-      .getAgents()
-      .then((r) => setAgents(r.agents))
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, []);
-
-  useEffect(() => {
-    try {
-      const preset = sessionStorage.getItem("memoryFilterAgentId");
-      if (preset) {
-        sessionStorage.removeItem("memoryFilterAgentId");
-        setAgentFilter(preset);
-        setActiveTab("list");
-        setSearching(true);
-        setError(null);
-        api
-          .searchMemory({ agent_id: preset, limit: 50, semantic: false })
-          .then((r) => setResults(r.results as MemoryResult[]))
-          .catch((e) => setError(e.message))
-          .finally(() => setSearching(false));
-      }
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  useEffect(() => {
-    if (activeTab === "graph" && graphNodes.length === 0 && !graphLoading) loadGraph();
-  }, [activeTab]);
-
-  useEffect(() => {
-    if (activeTab !== "graph" || graphNodes.length === 0 || (graphSize.w > 0 && graphSize.h > 0)) return;
-    const el = graphWrapRef.current;
-    if (!el) return;
-    let rafId = 0;
-    let cancelled = false;
-    let attempts = 0;
-    const maxAttempts = 10;
-    const measure = () => {
-      if (cancelled || attempts >= maxAttempts) return;
-      attempts += 1;
-      const rect = el.getBoundingClientRect();
-      const w = Math.max(0, Math.floor(rect.width));
-      const h = Math.max(0, Math.floor(rect.height));
-      if (w > 0 && h > 0) {
-        setGraphSize({ w, h });
-        return;
-      }
-      rafId = requestAnimationFrame(measure);
-    };
-    rafId = requestAnimationFrame(measure);
-    return () => {
-      cancelled = true;
-      cancelAnimationFrame(rafId);
-    };
-  }, [activeTab, graphNodes.length, graphSize.w, graphSize.h]);
-
-  function runSearch() {
-    if (activeTab === "graph") {
-      loadGraph();
-      return;
-    }
-    setSearching(true);
-    setError(null);
-    api
-      .searchMemory({
-        q: q.trim() || undefined,
-        agent_id: agentFilter.trim() || undefined,
-        limit: 50,
-        semantic,
-      })
-      .then((r) => setResults(r.results as MemoryResult[]))
-      .catch((e) => setError(e.message))
-      .finally(() => setSearching(false));
-  }
-
-  function loadGraph() {
-    setGraphLoading(true);
-    setGraphError(null);
-    api
-      .getMemoryGraph({
-        q: q.trim() || undefined,
-        agent_id: agentFilter.trim() || undefined,
-        limit: 200,
-      })
-      .then((r) => {
-        setGraphNodes(r.nodes ?? []);
-        setGraphEdges(r.edges ?? []);
-      })
-      .catch((e) => setGraphError(e.message))
-      .finally(() => setGraphLoading(false));
-  }
-
-  function handleDelete(id: number) {
-    if (!confirm("Delete this memory?")) return;
-    setDeletingId(id);
-    api
-      .deleteMemory(id)
-      .then(() => setResults((prev) => prev.filter((m) => m.id !== id)))
-      .catch((e) => setError(e.message))
-      .finally(() => setDeletingId(null));
-  }
-
-  function handleAddMemory() {
-    if (!addAgentId.trim() || !addText.trim()) {
-      setAddError("Agent and text are required.");
-      return;
-    }
-    setAddSaving(true);
-    setAddError(null);
-    setAddSuccess(false);
-    api
-      .writeMemory({ agent_id: addAgentId.trim(), text: addText.trim() })
-      .then(() => {
-        setAddText("");
-        setAddSuccess(true);
-        runSearch();
-      })
-      .catch((e) => setAddError(e.message))
-      .finally(() => setAddSaving(false));
-  }
-
-  useLayoutEffect(() => {
-    const el = graphWrapRef.current;
-    if (!el) return;
-    const update = () => {
-      const rect = el.getBoundingClientRect();
-      const w = Math.max(0, Math.floor(rect.width));
-      const h = Math.max(0, Math.floor(rect.height));
-      setGraphSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
-    };
-    update();
-    if (activeTab === "graph") {
-      const raf = requestAnimationFrame(() => update());
-      const ro = new ResizeObserver(() => update());
-      ro.observe(el);
-      return () => {
-        cancelAnimationFrame(raf);
-        ro.disconnect();
-      };
-    }
-    const ro = new ResizeObserver(() => update());
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [activeTab, graphNodes.length]);
+  const {
+    agents,
+    activeTab,
+    setActiveTab,
+    results,
+    searching,
+    q,
+    setQ,
+    agentFilter,
+    setAgentFilter,
+    semantic,
+    setSemantic,
+    addAgentId,
+    setAddAgentId,
+    addText,
+    setAddText,
+    addSaving,
+    addError,
+    addSuccess,
+    deletingId,
+    graphNodes,
+    graphEdges,
+    graphLoading,
+    graphError,
+    loading,
+    error,
+    graphRef,
+    graphWrapRef,
+    graphSize,
+    detailsOpen,
+    setDetailsOpen,
+    selectedNode,
+    selectedNodeLabel,
+    selectedConnected,
+    setSelectedNodeId,
+    runSearch,
+    handleDelete,
+    handleAddMemory,
+  } = useMemoryPage();
 
   if (loading) return <div className="p-4 text-muted-foreground">Loading…</div>;
 
@@ -253,19 +110,20 @@ export function MemoryPage() {
         >
           {activeTab === "graph" && !graphLoading && graphNodes.length > 0 && graphSize.w > 0 && graphSize.h > 0 && (
             <ForceGraph2D
-              ref={graphRef as any}
+              ref={graphRef as MutableRefObject<unknown>}
               width={graphSize.w}
               height={graphSize.h}
               graphData={{
                 nodes: graphNodes.map((n) => ({
+                  ...n,
                   id: n.id,
                   label:
                     n.type === "agent"
-                      ? (agents.find((a) => a.id === (n as any).agent_id)?.name ?? (n as any).agent_id)
+                      ? (agents.find((a) => a.id === (n as MemoryNodeDetails).agent_id)?.name ?? (n as MemoryNodeDetails).agent_id)
                       : n.type === "memory"
-                      ? String((n as any).label ?? (n as any).text ?? n.id)
+                      ? String((n as MemoryNodeDetails).label ?? (n as MemoryNodeDetails).text ?? n.id)
                       : n.type === "tag"
-                      ? String((n as any).label ?? n.id)
+                      ? String((n as MemoryNodeDetails).label ?? n.id)
                       : n.id,
                   type: n.type,
                 })),
@@ -276,16 +134,18 @@ export function MemoryPage() {
                 })),
               }}
               onNodeClick={(node) => {
-                const id = String((node as any).id ?? "");
+                const id = String((node as GraphCanvasNode).id ?? "");
                 if (!id) return;
                 setSelectedNodeId(id);
                 setDetailsOpen(true);
               }}
               nodeCanvasObject={(node, ctx, globalScale) => {
-                const label = (node as any).label as string;
-                const type = (node as any).type as string;
+                const graphNode = node as GraphCanvasNode;
+                const label = graphNode.label ?? "";
+                const type = graphNode.type ?? "";
                 const fontSize = 12 / globalScale;
                 const radius = 6;
+                const isDark = document.documentElement.classList.contains("dark");
                 ctx.beginPath();
                 if (type === "agent") {
                   ctx.fillStyle = "#0f172a";
@@ -294,21 +154,21 @@ export function MemoryPage() {
                 } else {
                   ctx.fillStyle = "#2563eb";
                 }
-                ctx.arc(node.x!, node.y!, radius, 0, 2 * Math.PI, false);
+                ctx.arc(graphNode.x ?? 0, graphNode.y ?? 0, radius, 0, 2 * Math.PI, false);
                 ctx.fill();
                 ctx.font = `${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
                 ctx.textAlign = "left";
                 ctx.textBaseline = "middle";
-                ctx.fillStyle = "#111827";
-                ctx.fillText(label, node.x! + radius + 3, node.y!);
+                ctx.fillStyle = isDark ? "#f9fafb" : "#111827";
+                ctx.fillText(label, (graphNode.x ?? 0) + radius + 3, graphNode.y ?? 0);
               }}
               linkColor={(link) =>
-                (link as any).type === "tagged" ? "rgba(22,163,74,0.4)" : "rgba(148,163,184,0.6)"
+                (link as GraphCanvasLink).type === "tagged" ? "rgba(22,163,74,0.4)" : "rgba(148,163,184,0.6)"
               }
               linkWidth={1}
               cooldownTicks={60}
               onEngineStop={() => {
-                const g = graphRef.current as any;
+                const g = graphRef.current as GraphApi | null;
                 if (g) g.zoomToFit(400);
               }}
             />
@@ -546,30 +406,30 @@ export function MemoryPage() {
                     <>
                       <div className="flex gap-2">
                         <div className="w-24 text-muted-foreground">Text</div>
-                        <div className="break-words">{String((selectedNode as any).text ?? selectedNodeLabel)}</div>
+                        <div className="break-words">{String((selectedNode as MemoryNodeDetails).text ?? selectedNodeLabel)}</div>
                       </div>
-                      {typeof (selectedNode as any).created_at === "string" && (
+                      {typeof (selectedNode as MemoryNodeDetails).created_at === "string" && (
                         <div className="flex gap-2">
                           <div className="w-24 text-muted-foreground">Created</div>
-                          <div className="font-mono text-xs">{String((selectedNode as any).created_at)}</div>
+                          <div className="font-mono text-xs">{String((selectedNode as MemoryNodeDetails).created_at)}</div>
                         </div>
                       )}
-                      {(selectedNode as any).user_id && (
+                      {(selectedNode as MemoryNodeDetails).user_id && (
                         <div className="flex gap-2">
                           <div className="w-24 text-muted-foreground">User</div>
-                          <div className="font-mono text-xs break-all">{String((selectedNode as any).user_id)}</div>
+                          <div className="font-mono text-xs break-all">{String((selectedNode as MemoryNodeDetails).user_id)}</div>
                         </div>
                       )}
-                      {(selectedNode as any).scope && (
+                      {(selectedNode as MemoryNodeDetails).scope && (
                         <div className="flex gap-2">
                           <div className="w-24 text-muted-foreground">Scope</div>
-                          <div className="font-medium">{String((selectedNode as any).scope)}</div>
+                          <div className="font-medium">{String((selectedNode as MemoryNodeDetails).scope)}</div>
                         </div>
                       )}
-                      {(selectedNode as any).tags && (
+                      {(selectedNode as MemoryNodeDetails).tags && (
                         <div className="flex gap-2">
                           <div className="w-24 text-muted-foreground">Tags</div>
-                          <div className="font-mono text-xs break-all">{String((selectedNode as any).tags)}</div>
+                          <div className="font-mono text-xs break-all">{String((selectedNode as MemoryNodeDetails).tags)}</div>
                         </div>
                       )}
                     </>

@@ -1,1 +1,1 @@
-export { AppLayout, type AppLayoutProps, type PageId } from "./AppLayout"
+export { AppLayout, type AppLayoutProps } from "./AppLayout"

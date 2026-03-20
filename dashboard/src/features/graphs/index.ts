@@ -1,4 +1,6 @@
 export { GraphsPage } from "./views/GraphsPage"
 export { GraphChatPage } from "./views/GraphChatPage"
-export type { GraphChatMessage, GraphNodeResult } from "./views/GraphChatPage"
+export type { GraphChatMessage, GraphNodeResult } from "./types/graph-chat.types"
 export { GraphChatProvider, useGraphChat } from "./contexts/graph-chat-context"
+export { useGraphChatSession } from "./hooks/useGraphChatSession"
+export { graphsRoute, graphChatRoute } from "./routes"

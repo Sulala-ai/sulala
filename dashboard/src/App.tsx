@@ -1,54 +1,12 @@
 import { useState, useEffect } from "react"
-import { AppLayout, type PageId } from "@/layouts"
-import { ChatNavProvider } from "@/features/chat"
-import { GraphChatProvider, useGraphChat } from "@/features/graphs"
-import { AgentsPage } from "@/features/agents"
-import { ChatPage } from "@/features/chat"
-import { GraphsPage, GraphChatPage } from "@/features/graphs"
-import { SkillsPage } from "@/features/skills"
-import { SchedulesPage } from "@/features/schedules"
-import { MemoryPage } from "@/features/memory"
-import { SettingsPage } from "@/features/settings"
+import { RouterProvider } from "react-router-dom"
 import { OnboardingWizard, useOnboarding } from "@/features/onboarding"
 import { LoginPage } from "@/components/LoginPage"
 import { FirstTimeTokenPage } from "@/components/FirstTimeTokenPage"
 import { getDashboardToken, getBootstrapToken, isAuthRequired, UNAUTHORIZED_EVENT } from "@/lib/api"
-
-function MainContent({ page, onNavigate }: { page: PageId; onNavigate: (p: PageId) => void }) {
-  const { graphChatGraphId, graphChatInitialInput, clearGraphChat } = useGraphChat()
-  switch (page) {
-    case "agents":
-      return <AgentsPage onNavigate={onNavigate} />
-    case "chat":
-      return <ChatPage />
-    case "graphs":
-      return <GraphsPage />
-    case "graph-chat":
-      return (
-        <GraphChatPage
-          graphId={graphChatGraphId ?? ""}
-          initialInput={graphChatInitialInput}
-          onBack={() => {
-            clearGraphChat()
-            onNavigate("graphs")
-          }}
-        />
-      )
-    case "skills":
-      return <SkillsPage />
-    case "schedules":
-      return <SchedulesPage onNavigate={onNavigate} />
-    case "memory":
-      return <MemoryPage />
-    case "settings":
-      return <SettingsPage />
-    default:
-      return <AgentsPage onNavigate={onNavigate} />
-  }
-}
+import { appRouter } from "@/router"
 
 export function App() {
-  const [activePage, setActivePage] = useState<PageId>("agents")
   const [authState, setAuthState] = useState<"checking" | "required" | "ok">(() =>
     getDashboardToken() ? "ok" : "checking"
   )
@@ -139,23 +97,12 @@ export function App() {
         hasAnyAgent={hasAnyAgent}
         onRefresh={refresh}
         onComplete={completeOnboarding}
-        onCompleteAndOpenSettings={() => {
-          setActivePage("settings")
-          completeOnboarding()
-        }}
+        onCompleteAndOpenSettings={completeOnboarding}
       />
     )
   }
 
-  return (
-    <ChatNavProvider onNavigate={(page) => setActivePage(page as PageId)}>
-      <GraphChatProvider onNavigate={(page) => setActivePage(page as PageId)}>
-        <AppLayout activePage={activePage} onNavigate={setActivePage}>
-          <MainContent page={activePage} onNavigate={setActivePage} />
-        </AppLayout>
-      </GraphChatProvider>
-    </ChatNavProvider>
-  )
+  return <RouterProvider router={appRouter} />
 }
 
 export default App

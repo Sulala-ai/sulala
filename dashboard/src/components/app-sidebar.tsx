@@ -12,29 +12,33 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 import { BotIcon, Settings2Icon, GitBranchIcon, PuzzleIcon, MessageCircleIcon, CalendarClockIcon, BrainIcon } from "lucide-react"
+import type { AppRouteId, NavRouteMeta } from "@/core/navigation"
 
-export type PageId = "agents" | "chat" | "tasks" | "logs" | "graphs" | "graph-chat" | "skills" | "schedules" | "memory" | "settings"
-
-const MAIN_PAGES: { id: PageId; title: string; icon: React.ReactNode }[] = [
-  { id: "agents", title: "Agents", icon: <BotIcon className="size-4" /> },
-  { id: "chat", title: "Chat", icon: <MessageCircleIcon className="size-4" /> },
-  { id: "graphs", title: "Graphs", icon: <GitBranchIcon className="size-4" /> },
-  { id: "schedules", title: "Schedules", icon: <CalendarClockIcon className="size-4" /> },
-  { id: "memory", title: "Memory", icon: <BrainIcon className="size-4" /> },
-]
-
-const SKILLS_GROUP_PAGES: { id: PageId; title: string; icon: React.ReactNode }[] = [
-  { id: "skills", title: "Skills", icon: <PuzzleIcon className="size-4" /> },
-]
+const ROUTE_ICONS: Record<AppRouteId, React.ReactNode> = {
+  agents: <BotIcon className="size-4" />,
+  chat: <MessageCircleIcon className="size-4" />,
+  graphs: <GitBranchIcon className="size-4" />,
+  "graph-chat": <GitBranchIcon className="size-4" />,
+  skills: <PuzzleIcon className="size-4" />,
+  schedules: <CalendarClockIcon className="size-4" />,
+  memory: <BrainIcon className="size-4" />,
+  settings: <Settings2Icon className="size-4" />,
+}
 
 export function AppSidebar({
-  activePage,
+  activeRouteId,
   onNavigate,
+  routes,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
-  activePage: PageId
-  onNavigate: (page: PageId) => void
+  activeRouteId: AppRouteId
+  onNavigate: (page: AppRouteId) => void
+  routes: NavRouteMeta[]
 }) {
+  const mainPages = routes.filter((route) => route.sidebarGroup === "main" && route.sidebarVisible !== false)
+  const skillsPages = routes.filter((route) => route.sidebarGroup === "skills" && route.sidebarVisible !== false)
+  const footerPage = routes.find((route) => route.sidebarGroup === "footer")
+
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader>
@@ -56,14 +60,14 @@ export function AppSidebar({
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {MAIN_PAGES.map((p) => (
+              {mainPages.map((p) => (
                 <SidebarMenuItem key={p.id}>
                   <SidebarMenuButton
                     tooltip={p.title}
-                    isActive={activePage === p.id}
+                    isActive={activeRouteId === p.id}
                     onClick={() => onNavigate(p.id)}
                   >
-                    {p.icon}
+                    {ROUTE_ICONS[p.id]}
                     <span>{p.title}</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -75,14 +79,14 @@ export function AppSidebar({
           <SidebarGroupLabel>Skills</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {SKILLS_GROUP_PAGES.map((p) => (
+              {skillsPages.map((p) => (
                 <SidebarMenuItem key={p.id}>
                   <SidebarMenuButton
                     tooltip={p.title}
-                    isActive={activePage === p.id}
+                    isActive={activeRouteId === p.id}
                     onClick={() => onNavigate(p.id)}
                   >
-                    {p.icon}
+                    {ROUTE_ICONS[p.id]}
                     <span>{p.title}</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -94,14 +98,16 @@ export function AppSidebar({
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton
-              tooltip="Settings"
-              isActive={activePage === "settings"}
-              onClick={() => onNavigate("settings")}
-            >
-              <Settings2Icon className="size-4" />
-              <span>Settings</span>
-            </SidebarMenuButton>
+            {footerPage ? (
+              <SidebarMenuButton
+                tooltip={footerPage.title}
+                isActive={activeRouteId === footerPage.id}
+                onClick={() => onNavigate(footerPage.id)}
+              >
+                {ROUTE_ICONS[footerPage.id]}
+                <span>{footerPage.title}</span>
+              </SidebarMenuButton>
+            ) : null}
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>

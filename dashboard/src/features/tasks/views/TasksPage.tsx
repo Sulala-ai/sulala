@@ -1,6 +1,4 @@
-import { useEffect, useState } from "react";
-import { api, type TaskItem } from "@/lib/api";
-import { useEventStream } from "@/hooks/useEventStream";
+import { useTasksPage } from "@/features/tasks/hooks/useTasksPage";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -12,27 +10,7 @@ import {
 } from "@/components/ui/table";
 
 export function TasksPage() {
-  const [tasks, setTasks] = useState<TaskItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const { lastEvent, connected } = useEventStream();
-
-  function load(skipLoading = false) {
-    if (!skipLoading) setLoading(true);
-    api
-      .getTasks({ limit: 50 })
-      .then((r) => setTasks(r.tasks))
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }
-
-  useEffect(() => {
-    load();
-  }, []);
-
-  useEffect(() => {
-    if (lastEvent) load(true);
-  }, [lastEvent]);
+  const { tasks, loading, error, connected } = useTasksPage();
 
   if (loading && tasks.length === 0) return <div className="p-4 text-muted-foreground">Loading tasks…</div>;
   if (error && tasks.length === 0) return <div className="p-4 text-destructive">Failed to load tasks: {error}</div>;

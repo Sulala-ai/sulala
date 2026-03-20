@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback } from "react"
+import type { AppRouteId } from "@/core/navigation"
 
-type OnNavigate = (page: string) => void
+type OnNavigate = (page: AppRouteId) => void
 
 type GraphChatContextValue = {
   openGraphChat: (graphId: string, initialInput?: string) => void

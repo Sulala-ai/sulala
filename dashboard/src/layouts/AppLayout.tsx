@@ -1,10 +1,11 @@
 import * as React from "react"
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
-import { AppSidebar, type PageId } from "@/components/app-sidebar"
+import { AppSidebar } from "@/components/app-sidebar"
 import { Separator } from "@/components/ui/separator"
 import { useTheme } from "@/components/theme-provider"
 import { Button } from "@/components/ui/button"
 import { MoonIcon, SunIcon, Github, MessageCircleIcon } from "lucide-react"
+import type { AppRouteId, NavRouteMeta } from "@/core/navigation"
 
 const CHAT_FAB_STORAGE_KEY = "sulala-chat-fab-position"
 const CHAT_FAB_SIZE_PX = 56 /** Tailwind size-14 */
@@ -38,17 +39,16 @@ function readStoredFabPosition(): { x: number; y: number } | null {
   }
 }
 
-export type { PageId }
-
 const GITHUB_URL = "https://github.com/Sulala-ai/sulala"
 
 export interface AppLayoutProps {
-  activePage: PageId
-  onNavigate: (page: PageId) => void
+  activeRouteId: AppRouteId
+  onNavigate: (page: AppRouteId) => void
+  routes: NavRouteMeta[]
   children: React.ReactNode
 }
 
-export function AppLayout({ activePage, onNavigate, children }: AppLayoutProps) {
+export function AppLayout({ activeRouteId, onNavigate, routes, children }: AppLayoutProps) {
   const { theme, setTheme } = useTheme()
   const isDark = theme === "dark" || (theme === "system" && typeof document !== "undefined" && document.documentElement.classList.contains("dark"))
 
@@ -150,7 +150,7 @@ export function AppLayout({ activePage, onNavigate, children }: AppLayoutProps) 
 
   return (
     <SidebarProvider>
-      <AppSidebar activePage={activePage} onNavigate={onNavigate} />
+      <AppSidebar activeRouteId={activeRouteId} onNavigate={onNavigate} routes={routes} />
       <SidebarInset>
         <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
           <SidebarTrigger className="-ml-1" />
@@ -178,7 +178,7 @@ export function AppLayout({ activePage, onNavigate, children }: AppLayoutProps) 
           </div>
         </header>
         {children}
-        {activePage !== "chat" && chatFabPos !== null && (
+        {activeRouteId !== "chat" && chatFabPos !== null && (
           <Button
             type="button"
             size="icon"

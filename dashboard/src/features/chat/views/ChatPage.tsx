@@ -1,6 +1,4 @@
-import { useEffect, useRef, useState } from "react"
-import { api, getWorkspaceFileUrl, type AgentSummary, type ConversationSummary } from "@/lib/api"
-import { useChatNav } from "../contexts/chat-nav-context"
+import { getWorkspaceFileUrl } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -9,27 +7,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { MarkdownContent } from "@/components/markdown-content"
 import { Particles } from "@/components/ui/particles"
 import { ShimmerBorder } from "@/components/ui/shimmer-border"
-
-export interface ToolCallStep {
-  tool: string
-  args?: unknown
-  result?: unknown
-  error?: string
-}
-
-export interface TokenUsage {
-  input_tokens: number
-  output_tokens: number
-}
-
-export type ChatMessage = {
-  role: "user" | "assistant"
-  content: string
-  steps?: ToolCallStep[]
-  timestamp?: string
-  usage?: TokenUsage
-  model?: string
-}
+import { useChatSession } from "../hooks/useChatSession"
+import type { TokenUsage } from "../types/chat.types"
 
 const DEFAULT_AVATAR = "agent1.jpg"
 
@@ -76,183 +55,34 @@ function formatTokens(n: number): string {
 }
 
 export function ChatPage() {
-  const { preselectedAgentId, clearPreselectedAgent } = useChatNav()
-  const [agents, setAgents] = useState<AgentSummary[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [agentId, setAgentId] = useState("")
-  const [conversationId, setConversationId] = useState<string | null>(null)
-  const [conversations, setConversations] = useState<ConversationSummary[]>([])
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [input, setInput] = useState("")
-  const [attachment, setAttachment] = useState<File | null>(null)
-  const [sending, setSending] = useState(false)
-  const [showSidebar, setShowSidebar] = useState(true)
-  const [editingConvId, setEditingConvId] = useState<string | null>(null)
-  const [editingTitle, setEditingTitle] = useState("")
-  const [autoSummarized, setAutoSummarized] = useState(false)
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const sendAbortRef = useRef<AbortController | null>(null)
-
-  useEffect(() => {
-    const savedConvId = window.localStorage.getItem("agent-os-chat-conversation-id")
-    if (savedConvId) {
-      setConversationId(savedConvId)
-      api
-        .getConversationMessages({ conversation_id: savedConvId, limit: 100 })
-        .then((r) => {
-          const history = r.messages
-            .filter((m) => m.role === "user" || m.role === "assistant")
-            .map<ChatMessage>((m) => {
-              const c = m.content as { text?: string; steps?: ToolCallStep[]; timestamp?: string; usage?: TokenUsage; model?: string } | string
-              const text = typeof c === "string" ? c : typeof c?.text === "string" ? c.text : JSON.stringify(c)
-              const steps = typeof c === "object" && c !== null && Array.isArray(c.steps) ? c.steps : undefined
-              const timestamp = typeof c === "object" && c !== null && typeof c.timestamp === "string" ? c.timestamp : undefined
-              const usage = typeof c === "object" && c !== null && c.usage && typeof c.usage.input_tokens === "number" && typeof c.usage.output_tokens === "number" ? c.usage : undefined
-              const model = typeof c === "object" && c !== null && typeof c.model === "string" ? c.model : undefined
-              return { role: m.role as ChatMessage["role"], content: text, steps, timestamp, usage, model }
-            })
-          if (history.length) setMessages(history)
-        })
-        .catch(() => { })
-    }
-    api
-      .getAgents()
-      .then((r) => {
-        setAgents(r.agents)
-        const ids = r.agents.map((a) => a.id)
-        if (preselectedAgentId && ids.includes(preselectedAgentId)) {
-          setAgentId(preselectedAgentId)
-          clearPreselectedAgent()
-        } else if (r.agents.length && !agentId) {
-          const saved = window.localStorage.getItem("agent-os-chat-agent-id")
-          const defaultId =
-            saved && ids.includes(saved)
-              ? saved
-              : ids.includes("manager_agent")
-                ? "manager_agent"
-                : r.agents[0].id
-          setAgentId(defaultId)
-        }
-      })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false))
-  }, [preselectedAgentId, clearPreselectedAgent])
-
-  useEffect(() => {
-    if (!agentId) return
-    api.getConversations({ agent_id: agentId, limit: 50 }).then((r) => setConversations(r.conversations)).catch(() => setConversations([]))
-  }, [agentId])
-
-  useEffect(() => {
-    scrollRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages])
-
-  async function handleSend(e: React.FormEvent) {
-    e.preventDefault()
-    const text = input.trim()
-    if (!agentId || !text || sending) return
-    setInput("")
-    setAttachment(null)
-    const userContent = attachment ? `${text}\n[Attached: ${attachment.name}]` : text
-    setMessages((prev) => [...prev, { role: "user", content: userContent, timestamp: new Date().toISOString() }])
-    setSending(true)
-    const controller = new AbortController()
-    sendAbortRef.current = controller
-    try {
-      const saveUser = await api.saveConversationMessage({
-        conversation_id: conversationId ?? undefined,
-        agent_id: agentId,
-        role: "user",
-        content: { text: userContent },
-      })
-      if (!conversationId && saveUser.conversation_id) {
-        setConversationId(saveUser.conversation_id)
-        setAutoSummarized(false)
-        window.localStorage.setItem("agent-os-chat-conversation-id", saveUser.conversation_id)
-      }
-      const convId = saveUser.conversation_id ?? conversationId ?? undefined
-      setMessages((prev) => [...prev, { role: "assistant", content: "" }])
-
-      let attachmentPaths: string[] | undefined
-      if (attachment) {
-        const { path } = await api.uploadAgentFile(agentId, attachment)
-        attachmentPaths = [path]
-      }
-
-      await api.runAgentStream(agentId, text, {
-        attachment_paths: attachmentPaths,
-        conversation_id: convId,
-        signal: controller.signal,
-        onDelta(delta) {
-          setMessages((prev) => {
-            const next = [...prev]
-            const last = next[next.length - 1]
-            if (last?.role === "assistant") next[next.length - 1] = { ...last, content: last.content + delta }
-            return next
-          })
-        },
-        onDone(data) {
-          const assistantTimestamp = new Date().toISOString()
-          setMessages((prev) => {
-            const next = [...prev]
-            const last = next[next.length - 1]
-            if (last?.role === "assistant") {
-              next[next.length - 1] = { ...last, content: data.finalContent || last.content, steps: data.steps, timestamp: assistantTimestamp, usage: data.usage, model: data.model }
-            }
-            return next
-          })
-          const finalContent = data.finalContent
-          const savedContent: { text: string; steps?: ToolCallStep[]; timestamp: string; usage?: TokenUsage; model?: string } = { text: finalContent, timestamp: assistantTimestamp }
-          if (data.steps?.length) savedContent.steps = data.steps
-          if (data.usage) savedContent.usage = data.usage
-          if (data.model) savedContent.model = data.model
-          api.saveConversationMessage({ conversation_id: convId, agent_id: agentId, role: "assistant", content: savedContent }).catch(() => { })
-          api.getConversations({ agent_id: agentId, limit: 50 }).then((res) => setConversations(res.conversations)).catch(() => { })
-        },
-        onError(message) {
-          setMessages((prev) => {
-            const next = [...prev]
-            const last = next[next.length - 1]
-            if (last?.role === "assistant") next[next.length - 1] = { ...last, content: `Error: ${message}`, timestamp: new Date().toISOString() }
-            return next
-          })
-        },
-      })
-
-      const approxTurns = messages.length + 2
-      if (convId && !autoSummarized && approxTurns >= 20) {
-        try {
-          const res = await api.summarizeConversation(convId)
-          setMessages((prev) => [...prev, { role: "assistant", content: `Summary: ${res.summary}` }])
-          setAutoSummarized(true)
-        } catch {
-          // ignore
-        }
-      }
-    } catch (e) {
-      const isAbort = e instanceof Error && e.name === "AbortError"
-      const errorContent = isAbort ? null : `Error: ${e instanceof Error ? e.message : String(e)}`
-      setMessages((prev) => {
-        const next = [...prev]
-        const last = next[next.length - 1]
-        if (last?.role === "assistant" && !last.timestamp) {
-          const finalContent = isAbort ? (last.content || "Stopped") : (errorContent ?? last.content)
-          next[next.length - 1] = { ...last, content: finalContent, timestamp: new Date().toISOString() }
-          return next
-        }
-        if (errorContent) return [...prev, { role: "assistant" as const, content: errorContent, timestamp: new Date().toISOString() }]
-        return next
-      })
-    } finally {
-      sendAbortRef.current = null
-      setSending(false)
-    }
-  }
-
-  function stopSending() {
-    sendAbortRef.current?.abort()
-  }
+  const {
+    agents,
+    loading,
+    error,
+    agentId,
+    setAgentId,
+    conversationId,
+    conversations,
+    messages,
+    input,
+    setInput,
+    attachment,
+    setAttachment,
+    sending,
+    showSidebar,
+    setShowSidebar,
+    editingConvId,
+    setEditingConvId,
+    editingTitle,
+    setEditingTitle,
+    scrollRef,
+    handleSend,
+    stopSending,
+    selectConversation,
+    renameConversation,
+    summarizeConversation,
+    startNewConversation,
+  } = useChatSession()
 
   if (loading) return <div className="p-4 text-muted-foreground">Loading agents…</div>
   if (error) return <div className="p-4 text-destructive">Failed to load agents: {error}</div>
@@ -290,14 +120,7 @@ export function ChatPage() {
                           value={editingTitle}
                           onChange={(e) => setEditingTitle(e.target.value)}
                           onBlur={async () => {
-                            const t = editingTitle.trim().slice(0, 200) || "Untitled conversation"
-                            setEditingConvId(null)
-                            try {
-                              await api.updateConversationTitle(c.id, t)
-                              api.getConversations({ agent_id: agentId, limit: 50 }).then((res) => setConversations(res.conversations)).catch(() => { })
-                            } catch {
-                              // ignore
-                            }
+                            await renameConversation(c.id, editingTitle)
                           }}
                           onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur() }}
                           className="h-7 flex-1 text-xs"
@@ -309,25 +132,7 @@ export function ChatPage() {
                             type="button"
                             className={"min-w-0 flex-1 rounded-md px-2 py-1 text-left text-xs " + (active ? "bg-primary/10 font-medium" : "hover:bg-muted")}
                             onClick={async () => {
-                              setConversationId(c.id)
-                              window.localStorage.setItem("agent-os-chat-conversation-id", c.id)
-                              try {
-                                const r = await api.getConversationMessages({ conversation_id: c.id, limit: 100 })
-                                const history = r.messages
-                                  .filter((m) => m.role === "user" || m.role === "assistant")
-                                  .map<ChatMessage>((m) => {
-                                    const content = m.content as { text?: string; steps?: ToolCallStep[]; timestamp?: string; usage?: TokenUsage; model?: string } | string
-                                    const text = typeof content === "string" ? content : typeof content?.text === "string" ? content.text : JSON.stringify(content)
-                                    const steps = typeof content === "object" && content !== null && Array.isArray(content.steps) ? content.steps : undefined
-                                    const timestamp = typeof content === "object" && content !== null && typeof content.timestamp === "string" ? content.timestamp : undefined
-                                    const usage = typeof content === "object" && content !== null && content.usage && typeof content.usage.input_tokens === "number" && typeof content.usage.output_tokens === "number" ? content.usage : undefined
-                                    const model = typeof content === "object" && content !== null && typeof content.model === "string" ? content.model : undefined
-                                    return { role: m.role as ChatMessage["role"], content: text, steps, timestamp, usage, model }
-                                  })
-                                setMessages(history)
-                              } catch {
-                                // ignore
-                              }
+                              await selectConversation(c.id)
                             }}
                           >
                             <div className="truncate">{displayTitle}</div>
@@ -364,16 +169,8 @@ export function ChatPage() {
               )}
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" disabled={!conversationId} onClick={async () => {
-                if (!conversationId) return
-                try {
-                  const res = await api.summarizeConversation(conversationId)
-                  setMessages((prev) => [...prev, { role: "assistant", content: `Summary: ${res.summary}` }])
-                } catch (e) {
-                  setMessages((prev) => [...prev, { role: "assistant", content: `Error summarizing: ${e instanceof Error ? e.message : String(e)}` }])
-                }
-              }}>Summarize</Button>
-              <Button variant="outline" size="sm" onClick={() => { setConversationId(null); setMessages([]); setAutoSummarized(false); window.localStorage.removeItem("agent-os-chat-conversation-id") }}>New conversation</Button>
+              <Button variant="outline" size="sm" disabled={!conversationId} onClick={summarizeConversation}>Summarize</Button>
+              <Button variant="outline" size="sm" onClick={startNewConversation}>New conversation</Button>
             </div>
           </div>
         </div>

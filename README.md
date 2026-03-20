@@ -1,5 +1,7 @@
 # Sulala Agent OS
 
+[![Repo Size](https://img.shields.io/github/repo-size/Sulala-ai/sulala)](https://github.com/Sulala-ai/sulala)
+
 Lightweight **Bun-based Agent Operating System** for **graph-based, collaborative micro-agents** — agents work together in workflows instead of a single-agent loop. It includes installable skills, workflows, and a web dashboard, and is designed to stay under **1 MB**.
 
 ## Showcase

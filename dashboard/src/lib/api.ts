@@ -19,6 +19,13 @@ export function setDashboardToken(token: string | null): void {
 
 export const UNAUTHORIZED_EVENT = "dashboard:unauthorized";
 
+/** Progress events while pulling an Ollama model (streaming NDJSON from POST /api/ollama/pull). */
+export type OllamaPullProgress = {
+  /** 0–100 when Ollama sends total/completed for a layer; null if unknown. */
+  percent: number | null;
+  status: string;
+};
+
 function authHeaders(): Record<string, string> {
   const token = getDashboardToken();
   if (!token) return {};
@@ -632,6 +639,10 @@ export const api = {
     viber_default_agent_id?: string | null;
     /** When true, setup/onboarding has been completed (stored in ~/.agent-os/config.json). */
     onboarding_completed?: boolean;
+    ollama_enabled?: boolean;
+    ollama_base_url?: string | null;
+    ollama_default_model?: string | null;
+    has_ollama_api_key?: boolean;
   }> {
     return fetchJson("/api/settings");
   },
@@ -656,11 +667,112 @@ export const api = {
     viber_auth_token?: string | null;
     viber_default_agent_id?: string | null;
     onboarding_completed?: boolean | null;
+    ollama_enabled?: boolean | null;
+    ollama_base_url?: string | null;
+    ollama_default_model?: string | null;
+    ollama_api_key?: string | null;
   }): Promise<{ ok: boolean }> {
     return fetchJson("/api/settings", {
       method: "PUT",
       body: JSON.stringify(settings),
     });
+  },
+
+  async getOllamaStatus(): Promise<{
+    cli_installed: boolean;
+    reachable: boolean;
+    version: string | null;
+    openai_base: string;
+  }> {
+    return fetchJson("/api/ollama/status");
+  },
+
+  async installOllama(): Promise<{ ok: boolean; message: string }> {
+    return fetchJson("/api/ollama/install", { method: "POST" });
+  },
+
+  /**
+   * Stream a model pull from Ollama (proxied NDJSON). Progress includes optional percent when Ollama sends total/completed.
+   */
+  async pullOllamaModelStream(
+    model: string,
+    onProgress: (p: OllamaPullProgress) => void,
+    signal?: AbortSignal
+  ): Promise<{ ok: boolean; error?: string }> {
+    const res = await fetch(`${BASE}/api/ollama/pull`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ model }),
+      signal,
+    });
+    checkUnauthorized(res);
+    if (!res.ok) {
+      const text = await res.text();
+      let msg = text;
+      try {
+        const j = JSON.parse(text) as { error?: string };
+        if (typeof j.error === "string") msg = j.error;
+      } catch {
+        /* plain text */
+      }
+      return { ok: false, error: msg || `Pull failed (${res.status})` };
+    }
+    const reader = res.body?.getReader();
+    if (!reader) return { ok: false, error: "No response body" };
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let lastPct: number | null = null;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split(/\r?\n/);
+      buffer = parts.pop() ?? "";
+      for (const line of parts) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const obj = JSON.parse(trimmed) as {
+            status?: string;
+            error?: string;
+            total?: number;
+            completed?: number;
+          };
+          if (typeof obj.error === "string" && obj.error) {
+            return { ok: false, error: obj.error };
+          }
+          const status = typeof obj.status === "string" ? obj.status : "";
+          if (typeof obj.total === "number" && obj.total > 0 && typeof obj.completed === "number") {
+            lastPct = Math.min(100, Math.round((obj.completed / obj.total) * 100));
+          }
+          if (status === "success") {
+            lastPct = 100;
+            onProgress({ percent: 100, status: "success" });
+            continue;
+          }
+          onProgress({
+            percent: lastPct,
+            status: status || "downloading",
+          });
+        } catch {
+          /* skip bad chunk */
+        }
+      }
+    }
+    if (buffer.trim()) {
+      try {
+        const obj = JSON.parse(buffer.trim()) as { status?: string; error?: string };
+        if (typeof obj.error === "string" && obj.error) {
+          return { ok: false, error: obj.error };
+        }
+        if (obj.status === "success") {
+          onProgress({ percent: 100, status: "success" });
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    return { ok: true };
   },
 
   async getMcpServers(): Promise<{

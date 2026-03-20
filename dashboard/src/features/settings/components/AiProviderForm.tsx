@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { api } from "@/lib/api"
 import { ExternalLinkIcon } from "lucide-react"
+import { SettingsOllama } from "@/features/settings/components/SettingsOllama"
 
 const AI_PROVIDER_OPTIONS: {
   id: "openai" | "anthropic" | "google" | "openrouter"
@@ -28,6 +29,7 @@ export type AiProviderFormProps = {
 
 export function AiProviderForm({ compact, onHasKeyChange }: AiProviderFormProps) {
   const [hasKeys, setHasKeys] = useState<Record<string, boolean>>({})
+  const [ollamaEnabled, setOllamaEnabled] = useState(false)
   const [keys, setKeys] = useState<Record<string, string>>({})
   const [touched, setTouched] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(true)
@@ -46,11 +48,17 @@ export function AiProviderForm({ compact, onHasKeyChange }: AiProviderFormProps)
           openrouter: r.has_openrouter_key ?? false,
         }
         setHasKeys(next)
-        onHasKeyChange?.(next.openai || next.anthropic || next.google || next.openrouter)
+        setOllamaEnabled(r.ollama_enabled === true)
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
-  }, [onHasKeyChange])
+  }, [])
+
+  useEffect(() => {
+    if (loading) return
+    const hasCloud = AI_PROVIDER_OPTIONS.some((o) => hasKeys[o.id])
+    onHasKeyChange?.(hasCloud || ollamaEnabled)
+  }, [loading, hasKeys, ollamaEnabled, onHasKeyChange])
 
   function handleSave(e: React.FormEvent) {
     e.preventDefault()
@@ -79,7 +87,6 @@ export function AiProviderForm({ compact, onHasKeyChange }: AiProviderFormProps)
         setTouched({})
         setSaved(true)
         setTimeout(() => setSaved(false), 2000)
-        onHasKeyChange?.(true)
       })
       .catch((e) => setError(e.message))
       .finally(() => setSaving(false))
@@ -127,8 +134,22 @@ export function AiProviderForm({ compact, onHasKeyChange }: AiProviderFormProps)
     </form>
   )
 
+  const ollamaBlock = (
+    <SettingsOllama
+      compact={compact}
+      onOllamaConfigured={(en) => {
+        setOllamaEnabled(en)
+      }}
+    />
+  )
+
   if (compact) {
-    return <div className="space-y-4">{formContent}</div>
+    return (
+      <div className="space-y-4">
+        {formContent}
+        {ollamaBlock}
+      </div>
+    )
   }
 
   return (
@@ -142,6 +163,7 @@ export function AiProviderForm({ compact, onHasKeyChange }: AiProviderFormProps)
         </CardHeader>
         <CardContent>{formContent}</CardContent>
       </Card>
+      {ollamaBlock}
     </div>
   )
 }

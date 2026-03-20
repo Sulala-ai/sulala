@@ -31,6 +31,7 @@ export interface LLMResponse {
 }
 
 import { readConfig } from "./config.js";
+import { normalizeOllamaOpenAiBase, defaultOllamaOpenAiBaseFromEnv } from "./ollama.js";
 
 /** Legacy Claude model ids (bare) → OpenRouter anthropic/... id. */
 const CLAUDE_LEGACY_TO_OPENROUTER: Record<string, string> = {
@@ -103,6 +104,22 @@ const ANTHROPIC_OPENAI_BASE = "https://api.anthropic.com/v1";
 async function getApiConfig(model: string): Promise<{ base: string; key: string; model: string }> {
   const config = await readConfig();
   let effectiveModel = model.trim();
+
+  // Local Ollama (OpenAI-compatible). Model ids use prefix ollama/<tag> so they are not mistaken for OpenRouter.
+  const OLLAMA_PREFIX = "ollama/";
+  if (effectiveModel.startsWith(OLLAMA_PREFIX)) {
+    const bare = effectiveModel.slice(OLLAMA_PREFIX.length).trim();
+    if (!bare) {
+      throw new Error("Invalid Ollama model: use e.g. ollama/qwen3");
+    }
+    const baseRaw =
+      process.env.OLLAMA_BASE_URL?.trim() || config.ollama_base_url?.trim() || defaultOllamaOpenAiBaseFromEnv();
+    const base = normalizeOllamaOpenAiBase(baseRaw);
+    const key =
+      process.env.OLLAMA_API_KEY?.trim() || config.ollama_api_key?.trim() || "ollama";
+    return { base, key, model: bare };
+  }
+
   const useOpenRouter = effectiveModel.includes("/");
 
   const googleKey =
@@ -176,7 +193,7 @@ async function getApiConfig(model: string): Promise<{ base: string; key: string;
     };
   }
   throw new Error(
-    "No LLM API key. Add keys in Settings → AI Provider. For Claude, set Anthropic key or OpenRouter key. For Gemini, set Google (Gemini) key or OpenRouter key."
+    "No LLM API key. Add keys in Settings → AI Provider, or enable local Ollama and use a model id like ollama/qwen3 (Settings → AI Provider)."
   );
 }
 

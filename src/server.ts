@@ -45,6 +45,11 @@ import {
   handlePutAgentWorkspaceFile,
   handleGetDoc,
 } from "./http/handlers.js";
+import {
+  handleOllamaStatus,
+  handleOllamaInstall,
+  handleOllamaPull,
+} from "./http/ollama-handlers.js";
 import { handleTelegramWebhook, handleTelegramStatus, handleTelegramSetWebhook, startTelegramPolling } from "./http/telegram.js";
 import { handleSlackWebhook, handleSlackStatus } from "./http/slack.js";
 import { handleDiscordWebhook, handleDiscordStatus } from "./http/discord.js";
@@ -537,6 +542,15 @@ function createRoutes(): Record<string, unknown> {
           message: "Restart the server for the new token to take effect.",
         });
       },
+    },
+    "/api/ollama/status": {
+      GET: () => handleOllamaStatus(),
+    },
+    "/api/ollama/install": {
+      POST: () => handleOllamaInstall(),
+    },
+    "/api/ollama/pull": {
+      POST: (req: Request) => handleOllamaPull(req),
     },
     "/api/mcp/servers": {
       GET: (req: Request) => handleMcpServers(req),

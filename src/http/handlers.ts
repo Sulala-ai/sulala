@@ -22,6 +22,7 @@ import {
   resolveInWorkspace,
   readMcpConfig,
   writeMcpConfig,
+  getSuggestModelId,
   type McpServerConfig,
 } from "../core/config.js";
 import {
@@ -339,6 +340,10 @@ export async function handleSettings(req: Request): Promise<Response> {
       viber_configured: Boolean(config.viber_auth_token?.trim()),
       viber_default_agent_id: config.viber_default_agent_id ?? null,
       onboarding_completed: config.onboarding_completed === true,
+      ollama_enabled: config.ollama_enabled === true,
+      ollama_base_url: config.ollama_base_url ?? null,
+      ollama_default_model: config.ollama_default_model ?? null,
+      has_ollama_api_key: Boolean(config.ollama_api_key?.trim()),
     });
   }
   if (req.method === "PUT") {
@@ -349,6 +354,10 @@ export async function handleSettings(req: Request): Promise<Response> {
       anthropic_api_key?: string | null;
       google_api_key?: string | null;
       openrouter_api_key?: string | null;
+      ollama_enabled?: boolean | null;
+      ollama_base_url?: string | null;
+      ollama_default_model?: string | null;
+      ollama_api_key?: string | null;
       telegram_bot_token?: string | null;
       telegram_default_agent_id?: string | null;
       telegram_report_chat_id?: string | null;
@@ -450,6 +459,20 @@ export async function handleSettings(req: Request): Promise<Response> {
       body.onboarding_completed !== undefined
         ? (body.onboarding_completed === true ? true : undefined)
         : current.onboarding_completed;
+    const ollama_enabled =
+      body.ollama_enabled !== undefined ? Boolean(body.ollama_enabled) : undefined;
+    const ollama_base_url =
+      body.ollama_base_url !== undefined
+        ? (typeof body.ollama_base_url === "string" ? body.ollama_base_url.trim() || undefined : undefined)
+        : undefined;
+    const ollama_default_model =
+      body.ollama_default_model !== undefined
+        ? (typeof body.ollama_default_model === "string" ? body.ollama_default_model.trim() || undefined : undefined)
+        : undefined;
+    const ollama_api_key =
+      body.ollama_api_key !== undefined
+        ? (typeof body.ollama_api_key === "string" ? body.ollama_api_key.trim() || undefined : undefined)
+        : undefined;
     await writeConfig({
       provider: provider ?? current.provider,
       api_key: api_key || undefined,
@@ -471,6 +494,11 @@ export async function handleSettings(req: Request): Promise<Response> {
       viber_auth_token: viber_auth_token || undefined,
       viber_default_agent_id: viber_default_agent_id || undefined,
       onboarding_completed: onboarding_completed ?? undefined,
+      ollama_enabled:
+        ollama_enabled !== undefined ? ollama_enabled : current.ollama_enabled,
+      ollama_base_url: ollama_base_url !== undefined ? ollama_base_url : current.ollama_base_url,
+      ollama_default_model: ollama_default_model !== undefined ? ollama_default_model : current.ollama_default_model,
+      ollama_api_key: ollama_api_key !== undefined ? ollama_api_key : current.ollama_api_key,
     });
     return jsonResponse({ ok: true });
   }
@@ -744,8 +772,9 @@ Rules:
 - schedule_input: the task/prompt to run when the schedule fires (e.g. "Summarize today's trending news"). Otherwise "".`;
 
   try {
+    const suggestModel = await getSuggestModelId();
     const res = await callLLM({
-      model: process.env.AGENT_OS_SUGGEST_MODEL || "gpt-4o-mini",
+      model: suggestModel,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: prompt },

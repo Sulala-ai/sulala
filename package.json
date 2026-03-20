@@ -1,6 +1,6 @@
 {
   "name": "@sulala-ai/agent-os",
-  "version": "0.1.44",
+  "version": "0.1.45",
   "description": "Lightweight Bun-based Agent Operating System — micro-agents, skills, workflows",
   "repository": {
     "type": "git",

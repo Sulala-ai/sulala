@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { ChevronLeftIcon, ChevronRightIcon, UserIcon, GitBranchIcon, BotIcon, PanelLeftIcon, PencilIcon, ArrowUpIcon, SparklesIcon, PaperclipIcon } from "lucide-react"
+import { ChevronLeftIcon, ChevronRightIcon, UserIcon, GitBranchIcon, BotIcon, PanelLeftIcon, PencilIcon, ArrowUpIcon, PaperclipIcon } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { MarkdownContent } from "@/components/markdown-content"
 import { Particles } from "@/components/ui/particles"

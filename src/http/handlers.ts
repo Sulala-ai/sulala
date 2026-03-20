@@ -12,7 +12,6 @@ import {
 } from "../core/tasks.js";
 import { getRecentEvents } from "../core/events.js";
 import { loadGraph, runGraph, runGraphStream, type GraphStreamEvent } from "../core/graphs.js";
-import { promptGate } from "../core/prompt-gate.js";
 import {
   readConfig,
   writeConfig,
@@ -76,21 +75,6 @@ export async function handleRun(req: Request, memoryStore: MemoryStore): Promise
     }
   }
 
-  const gate = promptGate({ kind: "agent_run", agent_id }, task);
-  if (gate.decision === "needs_clarification") {
-    return jsonResponse(
-      {
-        success: false,
-        gated: true,
-        reason: gate.reason,
-        template: gate.template,
-        suggestions: gate.suggestions,
-        questions: gate.questions,
-      },
-      400
-    );
-  }
-
   try {
     const result = await runAgent({ agent, task, conversationHistory });
     return jsonResponse(result);
@@ -132,26 +116,6 @@ export async function handleRunStream(req: Request, memoryStore: MemoryStore): P
     } catch {
       // ignore
     }
-  }
-
-  const gate = promptGate({ kind: "agent_run", agent_id }, task);
-  if (gate.decision === "needs_clarification") {
-    const msg = `${gate.reason}\n\n${gate.template}`;
-    const encoder = new TextEncoder();
-    function send(type: string, data: object): string {
-      return `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`;
-    }
-    const stream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(
-          encoder.encode(
-            send("error", { message: msg, gated: true, suggestions: gate.suggestions, questions: gate.questions })
-          )
-        );
-        controller.close();
-      },
-    });
-    return new Response(stream, { headers: SSE_HEADERS });
   }
 
   const encoder = new TextEncoder();
@@ -232,38 +196,6 @@ export async function handleTasks(req: Request, url: URL): Promise<Response> {
     const { agent_id, graph_id, task } = parsed.body;
     if (typeof task !== "string") {
       return jsonResponse({ error: "Missing required field: task" }, 400);
-    }
-    if (graph_id && !agent_id) {
-      const gate = promptGate({ kind: "graph_run", graph_id }, task);
-      if (gate.decision === "needs_clarification") {
-        return jsonResponse(
-          {
-            success: false,
-            gated: true,
-            reason: gate.reason,
-            template: gate.template,
-            suggestions: gate.suggestions,
-            questions: gate.questions,
-          },
-          400
-        );
-      }
-    }
-    if (agent_id && !graph_id) {
-      const gate = promptGate({ kind: "agent_run", agent_id }, task);
-      if (gate.decision === "needs_clarification") {
-        return jsonResponse(
-          {
-            success: false,
-            gated: true,
-            reason: gate.reason,
-            template: gate.template,
-            suggestions: gate.suggestions,
-            questions: gate.questions,
-          },
-          400
-        );
-      }
     }
     if (graph_id && !agent_id) {
       const t = await enqueueGraphTask(graph_id, task);
@@ -659,20 +591,6 @@ export async function handleGraphRun(req: Request): Promise<Response> {
     return jsonResponse({ error: `Graph not found: ${graph_id}` }, 404);
   }
 
-  const gate = promptGate({ kind: "graph_run", graph_id }, input);
-  if (gate.decision === "needs_clarification") {
-    return jsonResponse(
-      {
-        success: false,
-        gated: true,
-        reason: gate.reason,
-        template: gate.template,
-        questions: gate.questions,
-      },
-      400
-    );
-  }
-
   try {
     const result = await runGraph({ graph, input });
     return jsonResponse(result);
@@ -702,18 +620,6 @@ export async function handleGraphRunStream(req: Request): Promise<Response> {
   const encoder = new TextEncoder();
   function send(type: string, data: object): string {
     return `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`;
-  }
-
-  const gate = promptGate({ kind: "graph_run", graph_id }, input);
-  if (gate.decision === "needs_clarification") {
-    const msg = `${gate.reason}\n\n${gate.template}`;
-    const stream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(encoder.encode(send("error", { message: msg, gated: true, questions: gate.questions })));
-        controller.close();
-      },
-    });
-    return new Response(stream, { headers: SSE_HEADERS });
   }
 
   const KEEPALIVE_INTERVAL_MS = 30_000; // send SSE comment every 30s so connection is not closed by idleTimeout during long node runs

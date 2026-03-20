@@ -2,7 +2,6 @@ import type { AgentSummary } from "@/lib/api"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Avatar, AvatarImage } from "@/components/ui/avatar"
 import { MoreVertical, MessageCircle, BrainIcon, Pencil, Calendar, Play, Pause, PlayCircle, Trash2 } from "lucide-react"
 import { scheduleHint } from "@/components/schedule-dialog"
 

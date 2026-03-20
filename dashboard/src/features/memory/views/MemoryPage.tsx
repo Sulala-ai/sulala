@@ -11,14 +11,13 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import ForceGraph2D from "react-force-graph-2d";
 import { useMemoryPage } from "@/features/memory/hooks/useMemoryPage";
 import type { MemoryGraphNode } from "@/lib/api";
-import type { MutableRefObject } from "react";
 
 type MemoryNodeDetails = MemoryGraphNode & {
   agent_id?: string;
   label?: string;
   text?: string;
   created_at?: string;
-  user_id?: string;
+  user_id?: string | null;
   scope?: string;
   tags?: unknown;
 };
@@ -32,8 +31,6 @@ type GraphCanvasNode = {
 };
 
 type GraphCanvasLink = { type?: string };
-
-type GraphApi = { zoomToFit: (ms?: number) => void };
 
 function formatDate(iso: string): string {
   try {
@@ -70,7 +67,6 @@ export function MemoryPage() {
     graphError,
     loading,
     error,
-    graphRef,
     graphWrapRef,
     graphSize,
     detailsOpen,
@@ -110,7 +106,6 @@ export function MemoryPage() {
         >
           {activeTab === "graph" && !graphLoading && graphNodes.length > 0 && graphSize.w > 0 && graphSize.h > 0 && (
             <ForceGraph2D
-              ref={graphRef as MutableRefObject<unknown>}
               width={graphSize.w}
               height={graphSize.h}
               graphData={{
@@ -167,10 +162,6 @@ export function MemoryPage() {
               }
               linkWidth={1}
               cooldownTicks={60}
-              onEngineStop={() => {
-                const g = graphRef.current as GraphApi | null;
-                if (g) g.zoomToFit(400);
-              }}
             />
           )}
         </div>

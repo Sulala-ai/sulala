@@ -7,7 +7,7 @@ type MemoryNodeDetails = MemoryGraphNode & {
   label?: string
   text?: string
   created_at?: string
-  user_id?: string
+  user_id?: string | null
   scope?: string
   tags?: unknown
 }
@@ -32,7 +32,6 @@ export function useMemoryPage() {
   const [graphError, setGraphError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const graphRef = useRef<unknown>(null)
   const graphWrapRef = useRef<HTMLDivElement | null>(null)
   const [graphSize, setGraphSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 })
   const [detailsOpen, setDetailsOpen] = useState(false)
@@ -240,7 +239,6 @@ export function useMemoryPage() {
     graphError,
     loading,
     error,
-    graphRef,
     graphWrapRef,
     graphSize,
     detailsOpen,

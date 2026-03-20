@@ -2,13 +2,15 @@ import { getWorkspaceFileUrl } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { PanelLeftIcon, ChevronLeftIcon, PencilIcon, ChevronRightIcon, WrenchIcon, UserIcon, BotIcon } from "lucide-react"
+import { PanelLeftIcon, ChevronLeftIcon, PencilIcon, ChevronRightIcon, WrenchIcon, UserIcon, BotIcon, PaperclipIcon, ArrowUpIcon, SparklesIcon } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { MarkdownContent } from "@/components/markdown-content"
 import { Particles } from "@/components/ui/particles"
 import { ShimmerBorder } from "@/components/ui/shimmer-border"
+import { useEffect, useMemo, useState } from "react"
 import { useChatSession } from "../hooks/useChatSession"
 import type { TokenUsage } from "../types/chat.types"
+import { AI_PROVIDERS, getModelsForProvider, inferProviderFromModel, normalizeModelIdForDisplay, type AIProviderId } from "@/features/agents/ai-providers"
 
 const DEFAULT_AVATAR = "agent1.jpg"
 
@@ -78,11 +80,27 @@ export function ChatPage() {
     scrollRef,
     handleSend,
     stopSending,
+    updateAgentModel,
     selectConversation,
     renameConversation,
     summarizeConversation,
     startNewConversation,
   } = useChatSession()
+  const selectedAgent = agents.find((a) => a.id === agentId)
+  const providerOptions = useMemo(() => AI_PROVIDERS.filter((p) => p.id !== "custom"), [])
+  const [providerId, setProviderId] = useState<AIProviderId>("openai")
+  const [selectedModel, setSelectedModel] = useState("")
+
+  useEffect(() => {
+    if (!selectedAgent) return
+    const normalized = normalizeModelIdForDisplay(selectedAgent.model || "")
+    const inferred = inferProviderFromModel(normalized)
+    const nextProvider = inferred === "custom" ? "openrouter" : inferred
+    setProviderId(nextProvider)
+    setSelectedModel(normalized)
+  }, [selectedAgent?.id, selectedAgent?.model])
+
+  const modelOptions = useMemo(() => getModelsForProvider(providerId), [providerId])
 
   if (loading) return <div className="p-4 text-muted-foreground">Loading agents…</div>
   if (error) return <div className="p-4 text-destructive">Failed to load agents: {error}</div>
@@ -274,20 +292,72 @@ export function ChatPage() {
           </div>
         </div>
 
-        <div className="shrink-0 border-t p-4">
-          <form onSubmit={handleSend} className="mx-auto flex max-w-2xl flex-col gap-2">
-            <div className="flex gap-2">
-              <Input placeholder="Message…" value={input} onChange={(e) => setInput(e.target.value)} disabled={sending} className="flex-1" />
-              <label className="flex cursor-pointer items-center gap-1 rounded-lg border border-input bg-transparent px-3 py-2 text-sm hover:bg-muted/50">
-                <input type="file" className="sr-only" onChange={(e) => setAttachment(e.target.files?.[0] ?? null)} accept="video/*,audio/*,image/*,.mp4,.mov,.webm" />
-                <span className="shrink-0 text-muted-foreground">📎</span>
-                <span className="truncate max-w-[120px]">{attachment ? attachment.name : "Attach"}</span>
-              </label>
-              {sending ? (
-                <Button type="button" variant="outline" onClick={stopSending}>Stop</Button>
-              ) : (
-                <Button type="submit" disabled={!input.trim()}>Send</Button>
-              )}
+        <div className="shrink-0  p-4">
+          <form onSubmit={handleSend} className="mx-auto flex max-w-3xl flex-col gap-2">
+            <div className="rounded-2xl border border-border/80 bg-background shadow-sm">
+              <Input
+                placeholder="What's on your mind?"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                disabled={sending}
+                className="h-12 border-0 bg-transparent text-base shadow-none focus-visible:ring-0"
+              />
+              <div className="flex items-center justify-between gap-2 border-t px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <label className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-input text-muted-foreground hover:bg-muted/60" title={attachment ? attachment.name : "Attach file"}>
+                    <input type="file" className="sr-only" onChange={(e) => setAttachment(e.target.files?.[0] ?? null)} accept="video/*,audio/*,image/*,.mp4,.mov,.webm" />
+                    <PaperclipIcon className="size-4" />
+                  </label>
+                  {/* <SparklesIcon className="size-4 text-muted-foreground" /> */}
+                  <select
+                    aria-label="Provider"
+                    className="h-8 rounded-full border border-input bg-transparent px-3 text-xs"
+                    value={providerId}
+                    onChange={(e) => {
+                      const nextProvider = e.target.value as AIProviderId
+                      setProviderId(nextProvider)
+                      const nextDefaultModel = getModelsForProvider(nextProvider)[0]?.id ?? selectedModel
+                      if (nextDefaultModel) {
+                        setSelectedModel(nextDefaultModel)
+                        void updateAgentModel(nextDefaultModel)
+                      }
+                    }}
+                  >
+                    {providerOptions.map((provider) => (
+                      <option key={provider.id} value={provider.id}>
+                        {provider.label}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    aria-label="Model"
+                    className="h-8 min-w-[170px] rounded-full border border-input bg-transparent px-3 text-xs"
+                    value={selectedModel}
+                    onChange={(e) => {
+                      setSelectedModel(e.target.value)
+                      void updateAgentModel(e.target.value)
+                    }}
+                  >
+                    {modelOptions.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.label}
+                      </option>
+                    ))}
+                    {selectedModel && !modelOptions.some((m) => m.id === selectedModel) && <option value={selectedModel}>{selectedModel}</option>}
+                  </select>
+                </div>
+                {sending ? (
+                  <Button type="button" variant="outline" onClick={stopSending} className="h-8 rounded-full px-3">Stop</Button>
+                ) : (
+                  <Button type="submit" disabled={!input.trim()} size="icon" className="h-8 w-8 rounded-full">
+                    <ArrowUpIcon className="size-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+              <div className="truncate">{attachment ? `Attached: ${attachment.name}` : "No attachment"}</div>
+              <div>{selectedAgent ? `Using ${selectedAgent.name}` : "No agent selected"}</div>
             </div>
             {attachment && <p className="text-xs text-muted-foreground">File will be uploaded to the agent workspace and the path shared with the agent (e.g. for YouTube upload).</p>}
           </form>

@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { ChevronLeftIcon, ChevronRightIcon, UserIcon, GitBranchIcon, BotIcon, PanelLeftIcon, PencilIcon } from "lucide-react"
+import { ChevronLeftIcon, ChevronRightIcon, UserIcon, GitBranchIcon, BotIcon, PanelLeftIcon, PencilIcon, ArrowUpIcon, SparklesIcon, PaperclipIcon } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { MarkdownContent } from "@/components/markdown-content"
 import { Particles } from "@/components/ui/particles"
@@ -35,6 +35,8 @@ export function GraphChatPage({
     messages,
     input,
     setInput,
+    attachment,
+    setAttachment,
     sending,
     agents,
     graphAgentIds,
@@ -266,24 +268,44 @@ export function GraphChatPage({
         </div>
       </div>
 
-        <div className="shrink-0 border-t p-4">
-          <form onSubmit={handleSubmit} className="mx-auto flex max-w-2xl gap-2">
-            <Input
-              placeholder="Message (input for the graph)…"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              disabled={sending}
-              className="flex-1"
-            />
-            {sending ? (
-              <Button type="button" variant="outline" onClick={stopSending}>
-                Stop
-              </Button>
-            ) : (
-              <Button type="submit" disabled={!input.trim()}>
-                Send
-              </Button>
-            )}
+        <div className="shrink-0 p-4">
+          <form onSubmit={handleSubmit} className="mx-auto flex max-w-3xl flex-col gap-2">
+            <div className="rounded-2xl border border-border/80 bg-background shadow-sm">
+              <Input
+                placeholder="What's on your mind?"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                disabled={sending}
+                className="h-12 border-0 bg-transparent text-base shadow-none focus-visible:ring-0"
+              />
+              <div className="flex items-center justify-between gap-2 border-t px-3 py-2">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <label className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-input text-muted-foreground hover:bg-muted/60" title={attachment ? attachment.name : "Attach file"}>
+                    <input type="file" className="sr-only" onChange={(e) => setAttachment(e.target.files?.[0] ?? null)} accept="video/*,audio/*,image/*,.mp4,.mov,.webm" />
+                    <PaperclipIcon className="size-4" />
+                  </label>
+                  {/* <SparklesIcon className="size-4" /> */}
+                  <span>
+                    {graphAgentIds.length > 0
+                      ? `${graphAgentIds.length} agent${graphAgentIds.length > 1 ? "s" : ""} will run this input`
+                      : "Graph input"}
+                  </span>
+                </div>
+                {sending ? (
+                  <Button type="button" variant="outline" onClick={stopSending} className="h-8 rounded-full px-3">
+                    Stop
+                  </Button>
+                ) : (
+                  <Button type="submit" disabled={!input.trim()} size="icon" className="h-8 w-8 rounded-full">
+                    <ArrowUpIcon className="size-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center justify-between px-1 text-xs text-muted-foreground">
+              <span className="truncate">{attachment ? `Attached: ${attachment.name}` : "No attachment"}</span>
+              <span>Each message is sent to the graph as task input.</span>
+            </div>
           </form>
         </div>
       </div>

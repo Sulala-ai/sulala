@@ -251,6 +251,17 @@ export function useChatSession() {
     sendAbortRef.current?.abort()
   }
 
+  async function updateAgentModel(nextModel: string) {
+    const trimmed = nextModel.trim()
+    if (!agentId || !trimmed) return
+    try {
+      const res = await api.updateAgent(agentId, { model: trimmed })
+      setAgents((prev) => prev.map((a) => (a.id === agentId ? { ...a, model: res.agent.model } : a)))
+    } catch {
+      // ignore model update errors in chat UI
+    }
+  }
+
   return {
     agents,
     loading,
@@ -274,6 +285,7 @@ export function useChatSession() {
     scrollRef,
     handleSend,
     stopSending,
+    updateAgentModel,
     selectConversation,
     renameConversation,
     summarizeConversation,

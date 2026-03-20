@@ -20,6 +20,7 @@ function mapGraphChatMessage(
 export function useGraphChatSession(graphId: string, initialInput: string | null) {
   const [messages, setMessages] = useState<GraphChatMessage[]>([])
   const [input, setInput] = useState("")
+  const [attachment, setAttachment] = useState<File | null>(null)
   const [sending, setSending] = useState(false)
   const [agents, setAgents] = useState<AgentSummary[]>([])
   const [graphAgentIds, setGraphAgentIds] = useState<string[]>([])
@@ -126,8 +127,11 @@ export function useGraphChatSession(graphId: string, initialInput: string | null
 
   async function sendMessage(text: string) {
     if (!text.trim()) return
+    const attachmentNote = attachment ? `\n[Attached: ${attachment.name}]` : ""
+    const messageText = `${text.trim()}${attachmentNote}`
     const userTs = new Date().toISOString()
     setInput("")
+    setAttachment(null)
     setSending(true)
     stopPollingRef.current = false
 
@@ -137,7 +141,7 @@ export function useGraphChatSession(graphId: string, initialInput: string | null
         graph_id: graphId,
         conversation_id: conversationId ?? undefined,
         role: "user",
-        content: { text: text.trim() },
+        content: { text: messageText },
       })
       currentConvId = saveUser.conversation_id
       if (!conversationId) {
@@ -147,11 +151,11 @@ export function useGraphChatSession(graphId: string, initialInput: string | null
     } catch {
       // continue
     }
-    setMessages((prev) => [...prev, { role: "user", content: text.trim(), timestamp: userTs }])
+    setMessages((prev) => [...prev, { role: "user", content: messageText, timestamp: userTs }])
     setMessages((prev) => [...prev, { role: "assistant", content: "Running…" }])
 
     try {
-      const { task } = await api.enqueueGraphTask(graphId, text.trim())
+      const { task } = await api.enqueueGraphTask(graphId, messageText)
       startPolling(task.id, currentConvId)
     } catch (e) {
       setMessages((prev) => {
@@ -275,6 +279,8 @@ export function useGraphChatSession(graphId: string, initialInput: string | null
     messages,
     input,
     setInput,
+    attachment,
+    setAttachment,
     sending,
     agents,
     graphAgentIds,

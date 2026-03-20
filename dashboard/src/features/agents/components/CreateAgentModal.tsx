@@ -83,16 +83,25 @@ export function CreateAgentModal({
                       setSuggestError(null)
                       try {
                         const { suggestion } = await api.suggestAgent(describePrompt)
+                        const settings = await api.getSettings()
+                        const hasCloud =
+                          Boolean(settings.has_openai_key) ||
+                          Boolean(settings.has_anthropic_key) ||
+                          Boolean(settings.has_google_key) ||
+                          Boolean(settings.has_openrouter_key)
+                        const useOllama = settings.ollama_enabled === true && !hasCloud
+                        const tag = (settings.ollama_default_model || "qwen3").replace(/^ollama\//, "")
+                        const defaultModel = useOllama ? `ollama/${tag}` : "gpt-4o-mini"
                         setCreateForm({
                           id: suggestion.id,
                           name: suggestion.name,
-                          model: "gpt-4o-mini",
+                          model: defaultModel,
                           description: suggestion.description || undefined,
                           skills: suggestion.skills?.length ? suggestion.skills : undefined,
                           schedule: suggestion.schedule || undefined,
                           schedule_input: suggestion.schedule_input || undefined,
                         })
-                        setCreateProvider("openai")
+                        setCreateProvider(useOllama ? "ollama" : "openai")
                         setCreateStep("form")
                         setDescribePrompt("")
                       } catch (e) {

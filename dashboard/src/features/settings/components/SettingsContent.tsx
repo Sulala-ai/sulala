@@ -49,7 +49,7 @@ export function SettingsContent({
           <div className="mb-6">
             <h1 className="text-2xl font-semibold">Settings</h1>
             <p className="text-muted-foreground text-sm">
-              Configure your AI provider and API key. Agents use this for LLM and agent-suggestion calls.
+              Cloud API keys or local Ollama. Agents use this for LLM and agent-suggestion calls.
             </p>
           </div>
           <SettingsOverview />

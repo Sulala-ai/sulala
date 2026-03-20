@@ -74,6 +74,14 @@ export interface AgentOsConfig {
   skills_registry_url?: string;
   /** Dashboard gateway token. When set, dashboard and API require Authorization: Bearer <token>. Generated on first run if not set; override with DASHBOARD_SECRET env. */
   dashboard_secret?: string;
+  /** When true, local Ollama counts as a configured AI provider (no cloud key required). */
+  ollama_enabled?: boolean;
+  /** OpenAI-compatible API base for Ollama (e.g. http://127.0.0.1:11434/v1). */
+  ollama_base_url?: string;
+  /** Ollama model tag without the ollama/ prefix (e.g. qwen3, qwen3:8b). */
+  ollama_default_model?: string;
+  /** Optional Bearer token for Ollama; local default is often unnecessary. */
+  ollama_api_key?: string;
 }
 
 export interface McpServerConfig {
@@ -192,6 +200,10 @@ export async function readConfig(): Promise<AgentOsConfig> {
       const onboarding_completed = o.onboarding_completed;
       const skills_registry_url = o.skills_registry_url;
       const dashboard_secret = o.dashboard_secret;
+      const ollama_enabled = o.ollama_enabled;
+      const ollama_base_url = o.ollama_base_url;
+      const ollama_default_model = o.ollama_default_model;
+      const ollama_api_key = o.ollama_api_key;
       return {
         provider:
           provider === "openrouter" || provider === "openai"
@@ -218,6 +230,11 @@ export async function readConfig(): Promise<AgentOsConfig> {
         onboarding_completed: onboarding_completed === true ? true : undefined,
         skills_registry_url: typeof skills_registry_url === "string" ? skills_registry_url.trim() || undefined : undefined,
         dashboard_secret: typeof dashboard_secret === "string" ? dashboard_secret.trim() || undefined : undefined,
+        ollama_enabled: ollama_enabled === true ? true : undefined,
+        ollama_base_url: typeof ollama_base_url === "string" ? ollama_base_url.trim() || undefined : undefined,
+        ollama_default_model:
+          typeof ollama_default_model === "string" ? ollama_default_model.trim() || undefined : undefined,
+        ollama_api_key: typeof ollama_api_key === "string" ? ollama_api_key.trim() || undefined : undefined,
       };
     }
   } catch (err) {
@@ -258,7 +275,21 @@ export async function getDefaultModelForAvailableProvider(): Promise<string | nu
     config.openai_api_key?.trim() ||
     (config.provider === "openai" ? config.api_key?.trim() : undefined);
   if (openaiKey) return DEFAULT_MODEL_BY_PROVIDER.openai;
+  if (config.ollama_enabled === true) {
+    const tag = config.ollama_default_model?.trim() || "qwen3";
+    return `ollama/${tag}`;
+  }
   return null;
+}
+
+/**
+ * Model id for one-shot LLM calls (e.g. agent suggest): env override, else first available provider default.
+ */
+export async function getSuggestModelId(): Promise<string> {
+  const env = process.env.AGENT_OS_SUGGEST_MODEL?.trim();
+  if (env) return env;
+  const fallback = await getDefaultModelForAvailableProvider();
+  return fallback ?? "gpt-4o-mini";
 }
 
 export async function writeConfig(updates: Partial<AgentOsConfig>): Promise<void> {
@@ -286,6 +317,11 @@ export async function writeConfig(updates: Partial<AgentOsConfig>): Promise<void
     onboarding_completed: updates.onboarding_completed !== undefined ? updates.onboarding_completed : current.onboarding_completed,
     skills_registry_url: updates.skills_registry_url !== undefined ? updates.skills_registry_url : current.skills_registry_url,
     dashboard_secret: updates.dashboard_secret !== undefined ? updates.dashboard_secret : current.dashboard_secret,
+    ollama_enabled: updates.ollama_enabled !== undefined ? updates.ollama_enabled : current.ollama_enabled,
+    ollama_base_url: updates.ollama_base_url !== undefined ? updates.ollama_base_url : current.ollama_base_url,
+    ollama_default_model:
+      updates.ollama_default_model !== undefined ? updates.ollama_default_model : current.ollama_default_model,
+    ollama_api_key: updates.ollama_api_key !== undefined ? updates.ollama_api_key : current.ollama_api_key,
   };
   const home = getAgentOsHome();
   const path = getConfigPath();
@@ -316,6 +352,10 @@ export async function writeConfig(updates: Partial<AgentOsConfig>): Promise<void
         onboarding_completed: merged.onboarding_completed ?? null,
         skills_registry_url: merged.skills_registry_url ?? null,
         dashboard_secret: merged.dashboard_secret ?? null,
+        ollama_enabled: merged.ollama_enabled ?? null,
+        ollama_base_url: merged.ollama_base_url ?? null,
+        ollama_default_model: merged.ollama_default_model ?? null,
+        ollama_api_key: merged.ollama_api_key ?? null,
       },
       null,
       2

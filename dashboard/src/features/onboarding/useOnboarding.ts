@@ -45,7 +45,8 @@ export function useOnboarding(authReady: boolean): OnboardingState {
           Boolean(settings.has_openai_key) ||
           Boolean(settings.has_anthropic_key) ||
           Boolean(settings.has_google_key) ||
-          Boolean(settings.has_openrouter_key)
+          Boolean(settings.has_openrouter_key) ||
+          Boolean(settings.ollama_enabled)
         const channel =
           Boolean(settings.telegram_configured) ||
           Boolean(settings.slack_configured) ||
@@ -95,7 +96,8 @@ export function useOnboarding(authReady: boolean): OnboardingState {
           Boolean(settings.has_openai_key) ||
           Boolean(settings.has_anthropic_key) ||
           Boolean(settings.has_google_key) ||
-          Boolean(settings.has_openrouter_key)
+          Boolean(settings.has_openrouter_key) ||
+          Boolean(settings.ollama_enabled)
         const channel =
           Boolean(settings.telegram_configured) ||
           Boolean(settings.slack_configured) ||

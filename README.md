@@ -17,6 +17,8 @@ Lightweight **Bun-based Agent Operating System** for **graph-based, collaborativ
 | ![Dashboard access](docs/media/auth.png) | ![Channels](docs/media/channel.png) | ![Settings](docs/media/setting.png) |
 | Tasks | | |
 | ![Tasks](docs/media/tasks.png) | | |
+| Welcome (save token) | Onboarding (AI provider) | Local Ollama (settings) |
+| ![Welcome — save your login token](docs/media/welcome.png) | ![Set up in 3 steps — AI provider](docs/media/onboard.png) | ![Local Ollama configuration](docs/media/ollama.png) |
 
 ## How lightweight is Sulala?
 

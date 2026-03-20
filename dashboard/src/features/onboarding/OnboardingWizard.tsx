@@ -43,8 +43,9 @@ export function OnboardingWizard({ onComplete, onRefresh, onCompleteAndOpenSetti
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background p-6">
-      <div className="w-full max-w-xl mx-auto space-y-8">
+    <div className="fixed inset-0 z-50 overflow-y-auto overscroll-y-contain bg-background">
+      <div className="flex min-h-[100dvh] w-full flex-col items-center justify-center p-6">
+        <div className="w-full max-w-xl mx-auto space-y-8">
         <div className="text-center space-y-2">
           <div className="inline-flex items-center justify-center gap-2 rounded-full bg-primary/10 px-4 py-2 text-sm font-medium text-primary">
             <SparklesIcon className="size-4" />
@@ -85,7 +86,7 @@ export function OnboardingWizard({ onComplete, onRefresh, onCompleteAndOpenSetti
           {step === 1 && (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Add at least one API key so your agents can use an AI model. OpenRouter lets you use many models with one key.
+                Add a cloud API key (OpenRouter is one key for many models) or enable <strong className="font-medium text-foreground">local Ollama</strong> below — no paid key required.
               </p>
               <AiProviderForm compact onHasKeyChange={setStep1HasKey} />
             </div>
@@ -167,6 +168,7 @@ export function OnboardingWizard({ onComplete, onRefresh, onCompleteAndOpenSetti
             )}
           </div>
         </div>
+      </div>
       </div>
     </div>
   )

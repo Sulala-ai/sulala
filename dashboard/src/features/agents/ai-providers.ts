@@ -3,7 +3,7 @@
  * Model id is sent to the backend as-is (OpenRouter uses provider/model id).
  */
 
-export type AIProviderId = "openai" | "anthropic" | "google" | "openrouter" | "custom";
+export type AIProviderId = "openai" | "anthropic" | "google" | "openrouter" | "ollama" | "custom";
 
 export interface AIModelOption {
   id: string;
@@ -15,6 +15,7 @@ export const AI_PROVIDERS: { id: AIProviderId; label: string; hint?: string }[] 
   { id: "anthropic", label: "Anthropic", hint: "Claude, long context, tool use. Set ANTHROPIC_API_KEY." },
   { id: "google", label: "Google (Gemini)", hint: "Gemini 2.5, multimodal. Set GOOGLE_GENERATIVE_AI_API_KEY or Vertex." },
   { id: "openrouter", label: "OpenRouter", hint: "One API for 400+ models. Set OPENROUTER_API_KEY." },
+  { id: "ollama", label: "Ollama (local)", hint: "Free local models. Enable in Settings → AI Provider and use model ids like ollama/qwen3." },
   { id: "custom", label: "Custom", hint: "Enter any model id (e.g. for another backend)." },
 ];
 
@@ -53,6 +54,16 @@ const MODELS_OPENROUTER: AIModelOption[] = [
   { id: "google/gemini-2.5-pro", label: "Google · Gemini 2.5 Pro" },
 ];
 
+const MODELS_OLLAMA: AIModelOption[] = [
+  { id: "ollama/qwen3", label: "Qwen 3" },
+  { id: "ollama/qwen3:8b", label: "Qwen 3 · 8B" },
+  { id: "ollama/qwen3:4b", label: "Qwen 3 · 4B" },
+  { id: "ollama/llama3.2", label: "Llama 3.2" },
+  { id: "ollama/gemma3", label: "Gemma 3" },
+  /** NVIDIA 120B MoE (~12B active); local run needs very large VRAM. See ollama.com/library/nemotron-3-super */
+  { id: "ollama/nemotron-3-super", label: "Nemotron 3 Super (120B MoE — high-end GPU / large RAM)" },
+];
+
 export function getModelsForProvider(provider: AIProviderId): AIModelOption[] {
   switch (provider) {
     case "openai":
@@ -63,6 +74,8 @@ export function getModelsForProvider(provider: AIProviderId): AIModelOption[] {
       return MODELS_GOOGLE;
     case "openrouter":
       return MODELS_OPENROUTER;
+    case "ollama":
+      return MODELS_OLLAMA;
     default:
       return [];
   }
@@ -103,6 +116,7 @@ function toCurrentAnthropicModelId(id: string): string {
 export function inferProviderFromModel(model: string): AIProviderId {
   const m = model.trim();
   if (!m) return "openai";
+  if (m.startsWith("ollama/")) return "ollama";
   if (m.includes("/")) return "openrouter";
   if (MODELS_OPENAI.some((x) => x.id === m)) return "openai";
   if (MODELS_ANTHROPIC.some((x) => x.id === m)) return "anthropic";

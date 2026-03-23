@@ -12,6 +12,40 @@ import {
   isOllamaCliOnPath,
 } from "../core/ollama.js";
 
+/** Parse Ollama POST /api/show JSON for whether the model lists `tools` in capabilities. */
+function parseShowToolsCapability(data: unknown): boolean | null {
+  if (!data || typeof data !== "object") return null;
+  const o = data as Record<string, unknown>;
+  const fromArray = (arr: unknown): boolean | null => {
+    if (!Array.isArray(arr)) return null;
+    return arr.includes("tools");
+  };
+  const top = fromArray(o.capabilities);
+  if (top !== null) return top;
+  const details = o.details;
+  if (details && typeof details === "object") {
+    const d = fromArray((details as Record<string, unknown>).capabilities);
+    if (d !== null) return d;
+  }
+  return null;
+}
+
+async function ollamaShowSupportsTools(origin: string, name: string): Promise<boolean | null> {
+  try {
+    const res = await fetch(`${origin}/api/show`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+      signal: AbortSignal.timeout(12_000),
+    });
+    if (!res.ok) return null;
+    const data: unknown = await res.json();
+    return parseShowToolsCapability(data);
+  } catch {
+    return null;
+  }
+}
+
 function runSpawn(
   command: string,
   args: string[],
@@ -119,6 +153,68 @@ export async function handleOllamaInstall(): Promise<Response> {
  * Stream model pull from the local Ollama daemon (NDJSON). Proxies Ollama POST /api/pull
  * so the dashboard can show per-layer download progress (total/completed).
  */
+/**
+ * List models installed in the local Ollama daemon (GET /api/tags), as OpenAI-style ids `ollama/<name>`.
+ */
+export async function handleOllamaModels(): Promise<Response> {
+  const config = await readConfig();
+  const baseRaw =
+    process.env.OLLAMA_BASE_URL?.trim() || config.ollama_base_url?.trim() || "http://127.0.0.1:11434/v1";
+  const origin = openAiBaseToOllamaOrigin(normalizeOllamaOpenAiBase(baseRaw));
+  const tagsUrl = `${origin}/api/tags`;
+  try {
+    const res = await fetch(tagsUrl, { signal: AbortSignal.timeout(15_000) });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      return jsonResponse(
+        { error: text.slice(0, 300) || `Ollama list failed (${res.status})` },
+        res.status >= 400 && res.status < 600 ? res.status : 502
+      );
+    }
+    const data = (await res.json()) as { models?: Array<{ name?: string; size?: number }> };
+    const raw = Array.isArray(data.models) ? data.models : [];
+    const names = raw
+      .map((entry) => (typeof entry.name === "string" ? entry.name.trim() : ""))
+      .filter((n) => n.length > 0);
+
+    const supportsList: (boolean | null)[] = [];
+    const chunkSize = 6;
+    for (let i = 0; i < names.length; i += chunkSize) {
+      const chunk = names.slice(i, i + chunkSize);
+      const flags = await Promise.all(chunk.map((name) => ollamaShowSupportsTools(origin, name)));
+      supportsList.push(...flags);
+    }
+    const nameToTools = new Map(names.map((n, i) => [n, supportsList[i] ?? null] as const));
+
+    const models = raw
+      .map((entry) => {
+        const name = typeof entry.name === "string" ? entry.name.trim() : "";
+        if (!name) return null;
+        const id = `ollama/${name}`;
+        let label = name;
+        if (typeof entry.size === "number" && entry.size > 0) {
+          const gb = entry.size / 1024 ** 3;
+          label = gb >= 1 ? `${name} (${gb.toFixed(1)} GB)` : `${name} (${(entry.size / (1024 ** 2)).toFixed(0)} MB)`;
+        }
+        const supports_tools = nameToTools.get(name) ?? null;
+        if (supports_tools === true) {
+          label = `${label} · tools`;
+        } else if (supports_tools === false) {
+          label = `${label} · chat only`;
+        }
+        return { id, label, supports_tools };
+      })
+      .filter((x): x is { id: string; label: string; supports_tools: boolean | null } => x != null)
+      .sort((a, b) => a.id.localeCompare(b.id));
+    return jsonResponse({ models });
+  } catch {
+    return jsonResponse(
+      { error: `Cannot reach Ollama at ${origin}. Start the Ollama app or \`ollama serve\`, and check Settings → base URL.` },
+      502
+    );
+  }
+}
+
 export async function handleOllamaPull(req: Request): Promise<Response> {
   const parsed = await parseJsonBody<{ model?: string }>(req);
   if (!parsed.ok) return parsed.response;

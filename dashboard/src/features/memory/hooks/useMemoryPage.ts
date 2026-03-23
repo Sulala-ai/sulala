@@ -36,6 +36,7 @@ export function useMemoryPage() {
   const [graphSize, setGraphSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 })
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const graphAutoLoadedRef = useRef(false)
 
   const selectedNode = selectedNodeId ? graphNodes.find((n) => n.id === selectedNodeId) ?? null : null
 
@@ -109,10 +110,11 @@ export function useMemoryPage() {
   }, [agentFilter, q])
 
   useEffect(() => {
-    if (activeTab === "graph" && graphNodes.length === 0 && !graphLoading) {
-      queueMicrotask(() => loadGraph())
-    }
-  }, [activeTab, graphLoading, graphNodes.length, loadGraph])
+    if (activeTab !== "graph") return
+    if (graphAutoLoadedRef.current || graphLoading) return
+    graphAutoLoadedRef.current = true
+    queueMicrotask(() => loadGraph())
+  }, [activeTab, graphLoading, loadGraph])
 
   useEffect(() => {
     if (activeTab !== "graph" || graphNodes.length === 0 || (graphSize.w > 0 && graphSize.h > 0)) return

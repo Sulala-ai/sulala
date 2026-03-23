@@ -34,6 +34,42 @@ const DEFAULT_SYSTEM_SKILL_IDS = ["memory", "date", "fetch", "jq", "file-search"
 /** Meta file written when installing from hub so we know version without relying on SKILL.md frontmatter. */
 const SULALA_META_FILE = ".sulala-meta.json";
 
+async function runCommand(cmd: string[]): Promise<void> {
+  const proc = Bun.spawn({ cmd, stdout: "ignore", stderr: "pipe" });
+  const exit = await proc.exited;
+  if (exit !== 0) {
+    const err = await new Response(proc.stderr).text();
+    throw new Error(err.trim() || `Command failed: ${cmd.join(" ")}`);
+  }
+}
+
+async function extractZipArchive(archivePath: string, destDir: string): Promise<void> {
+  try {
+    await runCommand(["unzip", "-q", "-o", archivePath, "-d", destDir]);
+    return;
+  } catch (err) {
+    // Windows commonly lacks `unzip`; fallback to PowerShell Expand-Archive.
+    if (process.platform !== "win32") {
+      throw new Error(`unzip failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  const ps = `Expand-Archive -LiteralPath '${archivePath.replace(/'/g, "''")}' -DestinationPath '${destDir.replace(/'/g, "''")}' -Force`;
+  try {
+    await runCommand(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps]);
+  } catch (err) {
+    throw new Error(`zip extract failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+async function extractTarArchive(archivePath: string, destDir: string, gz: boolean): Promise<void> {
+  try {
+    await runCommand(gz ? ["tar", "-xzf", archivePath, "-C", destDir] : ["tar", "-xf", archivePath, "-C", destDir]);
+  } catch (err) {
+    throw new Error(`tar extract failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 export interface SulalaSkillMeta {
   version?: string;
   source?: string;
@@ -479,24 +515,14 @@ export async function installSkillFromUrl(
     if (isZip) {
       const zipPath = join(tmpDir, "archive.zip");
       await writeFile(zipPath, new Uint8Array(buf));
-      const proc = Bun.spawn({ cmd: ["unzip", "-q", "-o", zipPath, "-d", tmpDir], stdout: "ignore", stderr: "pipe" });
-      const exit = await proc.exited;
-      if (exit !== 0) {
-        const err = await new Response(proc.stderr).text();
-        throw new Error(`unzip failed: ${err}`);
-      }
+      await extractZipArchive(zipPath, tmpDir);
       const { id, sourcePath } = await chooseSkillRootFromExtract(tmpDir, "archive.zip");
       destId = explicitId != null && explicitId.trim() !== "" ? slugToSkillId(explicitId) : id;
       await cp(sourcePath, join(skillsDir, destId), { recursive: true });
     } else {
       const tarPath = join(tmpDir, "archive.tar.gz");
       await writeFile(tarPath, new Uint8Array(buf));
-      const proc = Bun.spawn({ cmd: ["tar", "-xzf", tarPath, "-C", tmpDir], stdout: "ignore", stderr: "pipe" });
-      const exit = await proc.exited;
-      if (exit !== 0) {
-        const err = await new Response(proc.stderr).text();
-        throw new Error(`tar extract failed: ${err}`);
-      }
+      await extractTarArchive(tarPath, tmpDir, true);
       const { id, sourcePath } = await chooseSkillRootFromExtract(tmpDir, "archive.tar.gz");
       destId = explicitId != null && explicitId.trim() !== "" ? slugToSkillId(explicitId) : id;
       await cp(sourcePath, join(skillsDir, destId), { recursive: true });
@@ -537,23 +563,9 @@ export async function installSkillFromUpload(buffer: ArrayBuffer, filename: stri
     await writeFile(archivePath, new Uint8Array(buffer));
 
     if (isZip) {
-      const proc = Bun.spawn({ cmd: ["unzip", "-q", "-o", archivePath, "-d", tmpDir], stdout: "ignore", stderr: "pipe" });
-      const exit = await proc.exited;
-      if (exit !== 0) {
-        const err = await new Response(proc.stderr).text();
-        throw new Error(`unzip failed: ${err}`);
-      }
+      await extractZipArchive(archivePath, tmpDir);
     } else {
-      const proc = Bun.spawn({
-        cmd: isTarGz ? ["tar", "-xzf", archivePath, "-C", tmpDir] : ["tar", "-xf", archivePath, "-C", tmpDir],
-        stdout: "ignore",
-        stderr: "pipe",
-      });
-      const exit = await proc.exited;
-      if (exit !== 0) {
-        const err = await new Response(proc.stderr).text();
-        throw new Error(`tar extract failed: ${err}`);
-      }
+      await extractTarArchive(archivePath, tmpDir, isTarGz);
     }
     const { id, sourcePath } = await chooseSkillRootFromExtract(tmpDir, filename);
     await cp(sourcePath, join(skillsDir, id), { recursive: true });

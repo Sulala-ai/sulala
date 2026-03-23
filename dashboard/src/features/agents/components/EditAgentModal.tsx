@@ -1,8 +1,10 @@
+import { useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { X, FileText } from "lucide-react"
-import { AI_PROVIDERS, getModelsForProvider, type AIProviderId } from "../ai-providers"
+import { AI_PROVIDERS, filterOllamaModelsForAgentSkills, getModelsForProvider, type AIProviderId } from "../ai-providers"
+import { useOllamaModels } from "../hooks/useOllamaModels"
 
 interface EditAgentModalProps {
   open: boolean
@@ -75,6 +77,23 @@ export function EditAgentModal({
   saveEditedAgent,
   onAgentSaved,
 }: EditAgentModalProps) {
+  const ollamaModels = useOllamaModels(Boolean(open && editProvider === "ollama"))
+  const hasSkills = (editForm.skills?.length ?? 0) > 0
+
+  const modelList = useMemo(() => {
+    if (editProvider === "ollama") {
+      return filterOllamaModelsForAgentSkills(ollamaModels.options, hasSkills)
+    }
+    return getModelsForProvider(editProvider)
+  }, [editProvider, ollamaModels.options, hasSkills])
+
+  useEffect(() => {
+    if (editProvider !== "ollama" || !modelList.length) return
+    if (!modelList.some((o) => o.id === editForm.model)) {
+      setEditForm((f) => ({ ...f, model: modelList[0]!.id }))
+    }
+  }, [editProvider, modelList, editForm.model, setEditForm])
+
   if (!open || !editingAgentId) return null
 
   return (
@@ -104,7 +123,7 @@ export function EditAgentModal({
                 onChange={(e) => {
                   const p = e.target.value as AIProviderId
                   setEditProvider(p)
-                  if (p !== "custom") {
+                  if (p !== "custom" && p !== "ollama") {
                     const models = getModelsForProvider(p)
                     setEditForm((f) => ({ ...f, model: models[0]?.id ?? f.model }))
                   }
@@ -123,17 +142,39 @@ export function EditAgentModal({
               {editProvider === "custom" ? (
                 <Input value={editForm.model} onChange={(e) => setEditForm((f) => ({ ...f, model: e.target.value }))} placeholder="e.g. gpt-4o-mini" className="mt-1" />
               ) : (
-                <select
-                  value={editForm.model}
-                  onChange={(e) => setEditForm((f) => ({ ...f, model: e.target.value }))}
-                  className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                >
-                  {getModelsForProvider(editProvider).map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.label}
-                    </option>
-                  ))}
-                </select>
+                <>
+                  {editProvider === "ollama" && ollamaModels.loading && (
+                    <p className="text-xs text-muted-foreground mt-1">Loading local models…</p>
+                  )}
+                  {editProvider === "ollama" && ollamaModels.error && !ollamaModels.loading && (
+                    <p className="text-xs text-destructive mt-1">{ollamaModels.error}</p>
+                  )}
+                  <select
+                    value={editForm.model}
+                    onChange={(e) => setEditForm((f) => ({ ...f, model: e.target.value }))}
+                    disabled={editProvider === "ollama" && ollamaModels.loading && modelList.length === 0}
+                    className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+                  >
+                    {modelList.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.label}
+                      </option>
+                    ))}
+                    {editForm.model && !modelList.some((m) => m.id === editForm.model) && (
+                      <option value={editForm.model}>{editForm.model}</option>
+                    )}
+                  </select>
+                  {editProvider === "ollama" && hasSkills && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      With skills, only models that support tool use are listed. Remove all skills to pick any installed model.
+                    </p>
+                  )}
+                  {editProvider === "ollama" && hasSkills && !ollamaModels.loading && ollamaModels.options.length > 0 && modelList.length === 0 && (
+                    <p className="text-xs text-destructive mt-1">
+                      No installed model reports tool support. Remove skills or pull a model that supports tools, then refresh.
+                    </p>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -246,7 +287,12 @@ export function EditAgentModal({
           {editError && <p className="text-sm text-destructive">{editError}</p>}
           <div className="flex gap-2 pt-2">
             <Button
-              disabled={editSaving || !editForm.name.trim() || !editForm.model.trim()}
+              disabled={
+                editSaving ||
+                !editForm.name.trim() ||
+                !editForm.model.trim() ||
+                (editProvider === "ollama" && hasSkills && modelList.length === 0)
+              }
               onClick={async () => {
                 try {
                   await saveEditedAgent()

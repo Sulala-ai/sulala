@@ -687,6 +687,13 @@ export const api = {
     return fetchJson("/api/ollama/status");
   },
 
+  /** Tags from the local Ollama daemon (`ollama list`); ids are `ollama/<name>`. Includes supports_tools when Ollama reports capabilities. */
+  async getOllamaModels(): Promise<{
+    models: Array<{ id: string; label: string; supports_tools?: boolean | null }>;
+  }> {
+    return fetchJson("/api/ollama/models");
+  },
+
   async installOllama(): Promise<{ ok: boolean; message: string }> {
     return fetchJson("/api/ollama/install", { method: "POST" });
   },

@@ -1,10 +1,17 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState, useSyncExternalStore } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { api, type OllamaPullProgress } from "@/lib/api"
+import { api } from "@/lib/api"
+import {
+  cancelOllamaPull,
+  getOllamaPullServerSnapshot,
+  getOllamaPullSnapshot,
+  startOllamaPull,
+  subscribeOllamaPull,
+} from "@/lib/ollamaPullStore"
 import { ExternalLinkIcon, Loader2Icon } from "lucide-react"
 
 export type SettingsOllamaProps = {
@@ -28,10 +35,8 @@ export function SettingsOllama({ compact, onOllamaConfigured }: SettingsOllamaPr
   const [reachable, setReachable] = useState(false)
   const [version, setVersion] = useState<string | null>(null)
   const [installing, setInstalling] = useState(false)
-  const [pulling, setPulling] = useState(false)
-  const [pullProgress, setPullProgress] = useState<OllamaPullProgress | null>(null)
-  const pullAbortRef = useRef<AbortController | null>(null)
   const [actionMessage, setActionMessage] = useState<string | null>(null)
+  const pullState = useSyncExternalStore(subscribeOllamaPull, getOllamaPullSnapshot, getOllamaPullServerSnapshot)
 
   function refreshStatus() {
     setStatusLoading(true)
@@ -109,39 +114,11 @@ export function SettingsOllama({ compact, onOllamaConfigured }: SettingsOllamaPr
     return status.replace(/_/g, " ")
   }
 
-  function cancelPull() {
-    pullAbortRef.current?.abort()
-  }
-
-  async function handlePull() {
+  function handlePull() {
     const tag = defaultModel.trim() || "qwen3"
-    setPulling(true)
-    setPullProgress({ percent: null, status: "connecting" })
     setActionMessage(null)
     setError(null)
-    const ac = new AbortController()
-    pullAbortRef.current = ac
-    try {
-      const r = await api.pullOllamaModelStream(tag, (p) => setPullProgress(p), ac.signal)
-      if (!r.ok) {
-        setError(r.error ?? "Pull failed")
-        setPullProgress(null)
-      } else {
-        setActionMessage(`Pulled ${tag}`)
-        setPullProgress(null)
-        refreshStatus()
-      }
-    } catch (e) {
-      if (e instanceof Error && e.name === "AbortError") {
-        setActionMessage("Pull cancelled")
-      } else {
-        setError(e instanceof Error ? e.message : String(e))
-      }
-      setPullProgress(null)
-    } finally {
-      setPulling(false)
-      pullAbortRef.current = null
-    }
+    startOllamaPull(tag, { onComplete: () => refreshStatus() })
   }
 
   if (loading) {
@@ -226,11 +203,11 @@ export function SettingsOllama({ compact, onOllamaConfigured }: SettingsOllamaPr
         )}
         {(cliInstalled || reachable) && (
           <>
-            <Button type="button" variant="outline" size="sm" disabled={pulling} onClick={() => void handlePull()}>
-              {pulling ? "Pulling…" : `Pull ${defaultModel.trim() || "qwen3"}`}
+            <Button type="button" variant="outline" size="sm" disabled={pullState.pulling} onClick={handlePull}>
+              {pullState.pulling ? "Pulling…" : `Pull ${defaultModel.trim() || "qwen3"}`}
             </Button>
-            {pulling && (
-              <Button type="button" variant="ghost" size="sm" onClick={cancelPull}>
+            {pullState.pulling && (
+              <Button type="button" variant="ghost" size="sm" onClick={cancelOllamaPull}>
                 Cancel
               </Button>
             )}
@@ -247,21 +224,21 @@ export function SettingsOllama({ compact, onOllamaConfigured }: SettingsOllamaPr
         </a>
       </div>
 
-      {pullProgress && (
+      {pullState.progress && (
         <div className="space-y-2 rounded-md border bg-muted/40 p-3">
           <div className="flex justify-between gap-2 text-xs text-muted-foreground">
-            <span className="truncate font-medium text-foreground" title={pullProgress.status}>
-              {formatPullStatus(pullProgress.status)}
+            <span className="truncate font-medium text-foreground" title={pullState.progress.status}>
+              {formatPullStatus(pullState.progress.status)}
             </span>
-            {pullProgress.percent != null && (
-              <span className="shrink-0 tabular-nums text-foreground">{pullProgress.percent}%</span>
+            {pullState.progress.percent != null && (
+              <span className="shrink-0 tabular-nums text-foreground">{pullState.progress.percent}%</span>
             )}
           </div>
           <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
-            {pullProgress.percent != null ? (
+            {pullState.progress.percent != null ? (
               <div
                 className="h-full bg-primary transition-[width] duration-300 ease-out"
-                style={{ width: `${pullProgress.percent}%` }}
+                style={{ width: `${pullState.progress.percent}%` }}
               />
             ) : (
               <div className="h-full w-1/3 max-w-[45%] animate-pulse rounded-full bg-primary/80" />
@@ -285,7 +262,9 @@ export function SettingsOllama({ compact, onOllamaConfigured }: SettingsOllamaPr
         )}
       </p>
       {actionMessage && <p className="text-sm text-muted-foreground">{actionMessage}</p>}
+      {pullState.pullActionMessage && <p className="text-sm text-muted-foreground">{pullState.pullActionMessage}</p>}
       {error && <p className="text-sm text-destructive">{error}</p>}
+      {pullState.pullError && <p className="text-sm text-destructive">{pullState.pullError}</p>}
       {!compact && (
         <p className="text-xs text-muted-foreground">
           Install uses Homebrew on macOS or the official script on Linux. Windows: use the download link. Vector memory embeddings still expect a cloud key unless you configure a compatible embedding endpoint separately.

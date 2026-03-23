@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { createContext, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react"
 import { api, type AgentSummary, type ConversationSummary } from "@/lib/api"
 import { useChatNav } from "../contexts/chat-nav-context"
 import type { ChatMessage, ToolCallStep, TokenUsage } from "../types/chat.types"
@@ -27,7 +27,7 @@ function mapConversationMessage(
   return { role, content: text, steps, timestamp, usage, model }
 }
 
-export function useChatSession() {
+function useProvideChatSession() {
   const { preselectedAgentId, clearPreselectedAgent } = useChatNav()
   const [agents, setAgents] = useState<AgentSummary[]>([])
   const [loading, setLoading] = useState(true)
@@ -45,24 +45,39 @@ export function useChatSession() {
   const [autoSummarized, setAutoSummarized] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const sendAbortRef = useRef<AbortController | null>(null)
+  /** Fresh read for async handlers (e.g. late conversation fetch) so we never overwrite an active stream. */
+  const sendingRef = useRef(false)
+  useEffect(() => {
+    sendingRef.current = sending
+  }, [sending])
 
   useEffect(() => {
+    let cancelled = false
     const savedConvId = window.localStorage.getItem("agent-os-chat-conversation-id")
     if (savedConvId) {
       setConversationId(savedConvId)
       api
         .getConversationMessages({ conversation_id: savedConvId, limit: 100 })
         .then((r) => {
+          if (cancelled) return
           const history = r.messages
             .filter((m) => m.role === "user" || m.role === "assistant")
             .map((m) => mapConversationMessage(m.content as string | Record<string, unknown>, m.role as "user" | "assistant"))
-          if (history.length) setMessages(history)
+          if (history.length === 0) return
+          setMessages((prev) => {
+            if (cancelled) return prev
+            if (sendingRef.current) return prev
+            // Local thread is ahead of this server snapshot (streaming or not yet persisted).
+            if (prev.length > history.length) return prev
+            return history
+          })
         })
         .catch(() => {})
     }
     api
       .getAgents()
       .then((r) => {
+        if (cancelled) return
         setAgents(r.agents)
         const ids = r.agents.map((a) => a.id)
         if (preselectedAgentId && ids.includes(preselectedAgentId)) {
@@ -74,8 +89,15 @@ export function useChatSession() {
           setAgentId(defaultId)
         }
       })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false))
+      .catch((e) => {
+        if (!cancelled) setError(e.message)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [preselectedAgentId, clearPreselectedAgent])
 
   useEffect(() => {
@@ -90,7 +112,7 @@ export function useChatSession() {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
 
-  async function handleSend(e: React.FormEvent) {
+  async function handleSend(e: FormEvent) {
     e.preventDefault()
     const text = input.trim()
     if (!agentId || !text || sending) return
@@ -205,6 +227,7 @@ export function useChatSession() {
   }
 
   async function selectConversation(id: string) {
+    if (sendingRef.current) return
     setConversationId(id)
     window.localStorage.setItem("agent-os-chat-conversation-id", id)
     try {
@@ -291,4 +314,19 @@ export function useChatSession() {
     summarizeConversation,
     startNewConversation,
   }
+}
+
+type ChatSessionContextValue = ReturnType<typeof useProvideChatSession>
+
+const ChatSessionContext = createContext<ChatSessionContextValue | null>(null)
+
+export function ChatSessionProvider({ children }: { children: ReactNode }) {
+  const value = useProvideChatSession()
+  return <ChatSessionContext.Provider value={value}>{children}</ChatSessionContext.Provider>
+}
+
+export function useChatSession() {
+  const ctx = useContext(ChatSessionContext)
+  if (!ctx) throw new Error("useChatSession must be used within ChatSessionProvider")
+  return ctx
 }

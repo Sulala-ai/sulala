@@ -8,7 +8,7 @@
  *   - /api/graphs, /api/graphs/run
  *   - /api/memory/write, /api/memory/search
  *   - /api/conversations, /api/conversations/summarize, /api/conversations/:id (PUT)
- *   - /api/settings, /api/skills, /api/skills/:id/config, /api/skills/install, etc.
+ *   - /api/settings, /api/ollama/status, /api/ollama/models, /api/skills, /api/skills/:id/config, /api/skills/install, etc.
  *   - /api/channels/telegram/webhook, set-webhook, status
  *   - /api/channels/slack/webhook, status
  *   - /api/channels/discord/webhook, status
@@ -48,6 +48,7 @@ import {
 import {
   handleOllamaStatus,
   handleOllamaInstall,
+  handleOllamaModels,
   handleOllamaPull,
 } from "./http/ollama-handlers.js";
 import { handleTelegramWebhook, handleTelegramStatus, handleTelegramSetWebhook, startTelegramPolling } from "./http/telegram.js";
@@ -545,6 +546,9 @@ function createRoutes(): Record<string, unknown> {
     },
     "/api/ollama/status": {
       GET: () => handleOllamaStatus(),
+    },
+    "/api/ollama/models": {
+      GET: () => handleOllamaModels(),
     },
     "/api/ollama/install": {
       POST: () => handleOllamaInstall(),

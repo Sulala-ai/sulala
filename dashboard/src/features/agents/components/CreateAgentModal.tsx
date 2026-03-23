@@ -1,9 +1,11 @@
+import { useEffect, useMemo } from "react"
 import { api, type CreateAgentPayload, type SkillSummary } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { X } from "lucide-react"
-import { AI_PROVIDERS, getModelsForProvider, type AIProviderId } from "../ai-providers"
+import { AI_PROVIDERS, filterOllamaModelsForAgentSkills, getModelsForProvider, type AIProviderId } from "../ai-providers"
+import { useOllamaModels } from "../hooks/useOllamaModels"
 
 interface CreateAgentModalProps {
   open: boolean
@@ -48,6 +50,23 @@ export function CreateAgentModal({
   availableAvatars,
   onCreate,
 }: CreateAgentModalProps) {
+  const ollamaModels = useOllamaModels(open && createProvider === "ollama")
+  const hasSkills = (createForm.skills?.length ?? 0) > 0
+
+  const modelList = useMemo(() => {
+    if (createProvider === "ollama") {
+      return filterOllamaModelsForAgentSkills(ollamaModels.options, hasSkills)
+    }
+    return getModelsForProvider(createProvider)
+  }, [createProvider, ollamaModels.options, hasSkills])
+
+  useEffect(() => {
+    if (createProvider !== "ollama" || !modelList.length) return
+    if (!modelList.some((o) => o.id === createForm.model)) {
+      setCreateForm((f) => ({ ...f, model: modelList[0]!.id }))
+    }
+  }, [createProvider, modelList, createForm.model, setCreateForm])
+
   if (!open) return null
 
   return (
@@ -146,7 +165,7 @@ export function CreateAgentModal({
                   onChange={(e) => {
                     const p = e.target.value as AIProviderId
                     setCreateProvider(p)
-                    if (p !== "custom") {
+                    if (p !== "custom" && p !== "ollama") {
                       const models = getModelsForProvider(p)
                       setCreateForm((f) => ({ ...f, model: models[0]?.id ?? f.model }))
                     }
@@ -165,17 +184,39 @@ export function CreateAgentModal({
                 {createProvider === "custom" ? (
                   <Input placeholder="e.g. gpt-4o-mini or openai/gpt-4o" value={createForm.model} onChange={(e) => setCreateForm((f) => ({ ...f, model: e.target.value }))} className="mt-1" />
                 ) : (
-                  <select
-                    value={createForm.model}
-                    onChange={(e) => setCreateForm((f) => ({ ...f, model: e.target.value }))}
-                    className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                  >
-                    {getModelsForProvider(createProvider).map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.label}
-                      </option>
-                    ))}
-                  </select>
+                  <>
+                    {createProvider === "ollama" && ollamaModels.loading && (
+                      <p className="text-xs text-muted-foreground mt-1">Loading local models…</p>
+                    )}
+                    {createProvider === "ollama" && ollamaModels.error && !ollamaModels.loading && (
+                      <p className="text-xs text-destructive mt-1">{ollamaModels.error}</p>
+                    )}
+                    <select
+                      value={createForm.model}
+                      onChange={(e) => setCreateForm((f) => ({ ...f, model: e.target.value }))}
+                      disabled={createProvider === "ollama" && ollamaModels.loading && modelList.length === 0}
+                      className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+                    >
+                      {modelList.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.label}
+                        </option>
+                      ))}
+                      {createForm.model && !modelList.some((m) => m.id === createForm.model) && (
+                        <option value={createForm.model}>{createForm.model}</option>
+                      )}
+                    </select>
+                    {createProvider === "ollama" && hasSkills && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        With skills, only models that support tool use are listed. Remove all skills to pick any installed model.
+                      </p>
+                    )}
+                    {createProvider === "ollama" && hasSkills && !ollamaModels.loading && ollamaModels.options.length > 0 && modelList.length === 0 && (
+                      <p className="text-xs text-destructive mt-1">
+                        No installed model reports tool support. Remove skills or pull a model that supports tools (e.g. qwen3.5, llama3.2), then refresh.
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
               <div>
@@ -244,7 +285,16 @@ export function CreateAgentModal({
               </div>
               {createError && <p className="text-sm text-destructive">{createError}</p>}
               <div className="flex gap-2 pt-2">
-                <Button disabled={createSaving || !createForm.id || !createForm.name || !createForm.model} onClick={onCreate}>
+                <Button
+                  disabled={
+                    createSaving ||
+                    !createForm.id ||
+                    !createForm.name ||
+                    !createForm.model ||
+                    (createProvider === "ollama" && hasSkills && modelList.length === 0)
+                  }
+                  onClick={onCreate}
+                >
                   {createSaving ? "Creating…" : "Create"}
                 </Button>
                 <Button variant="secondary" onClick={onClose}>

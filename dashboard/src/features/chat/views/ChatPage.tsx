@@ -10,7 +10,15 @@ import { ShimmerBorder } from "@/components/ui/shimmer-border"
 import { useEffect, useMemo, useState } from "react"
 import { useChatSession } from "../hooks/useChatSession"
 import type { TokenUsage } from "../types/chat.types"
-import { AI_PROVIDERS, getModelsForProvider, inferProviderFromModel, normalizeModelIdForDisplay, type AIProviderId } from "@/features/agents/ai-providers"
+import {
+  AI_PROVIDERS,
+  filterOllamaModelsForAgentSkills,
+  getModelsForProvider,
+  inferProviderFromModel,
+  normalizeModelIdForDisplay,
+  type AIProviderId,
+} from "@/features/agents/ai-providers"
+import { useOllamaModels } from "@/features/agents/hooks/useOllamaModels"
 
 const DEFAULT_AVATAR = "agent1.jpg"
 
@@ -87,6 +95,7 @@ export function ChatPage() {
     startNewConversation,
   } = useChatSession()
   const selectedAgent = agents.find((a) => a.id === agentId)
+  const agentHasSkills = (selectedAgent?.skills?.length ?? 0) > 0
   const providerOptions = useMemo(() => AI_PROVIDERS.filter((p) => p.id !== "custom"), [])
   const [providerId, setProviderId] = useState<AIProviderId>("openai")
   const [selectedModel, setSelectedModel] = useState("")
@@ -100,7 +109,24 @@ export function ChatPage() {
     setSelectedModel(normalized)
   }, [selectedAgent?.id, selectedAgent?.model])
 
-  const modelOptions = useMemo(() => getModelsForProvider(providerId), [providerId])
+  const ollamaModels = useOllamaModels(providerId === "ollama")
+
+  const modelOptions = useMemo(() => {
+    if (providerId === "ollama") {
+      return filterOllamaModelsForAgentSkills(ollamaModels.options, agentHasSkills)
+    }
+    return getModelsForProvider(providerId)
+  }, [providerId, ollamaModels.options, agentHasSkills])
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- sync when local Ollama tag list loads
+  useEffect(() => {
+    if (providerId !== "ollama" || !modelOptions.length) return
+    if (!modelOptions.some((m) => m.id === selectedModel)) {
+      const first = modelOptions[0]!.id
+      setSelectedModel(first)
+      void updateAgentModel(first)
+    }
+  }, [providerId, modelOptions, selectedModel])
 
   if (loading) return <div className="p-4 text-muted-foreground">Loading agents…</div>
   if (error) return <div className="p-4 text-destructive">Failed to load agents: {error}</div>
@@ -219,7 +245,7 @@ export function ChatPage() {
         <div className="relative z-10 flex-1 overflow-y-auto p-4">
           <div className="mx-auto max-w-2xl space-y-4">
             {messages.map((m, i) => {
-              const isStreaming = sending && i === messages.length - 1 && m.role === "assistant" && !m.timestamp
+              const isStreaming = sending && i === messages.length - 1 && m.role === "assistant"
               const isUser = m.role === "user"
               const convAgentId = conversations.find((c) => c.id === conversationId)?.agent_id ?? agentId
               const currentAgent = agents.find((a) => a.id === convAgentId)
@@ -316,6 +342,9 @@ export function ChatPage() {
                     onChange={(e) => {
                       const nextProvider = e.target.value as AIProviderId
                       setProviderId(nextProvider)
+                      if (nextProvider === "ollama") {
+                        return
+                      }
                       const nextDefaultModel = getModelsForProvider(nextProvider)[0]?.id ?? selectedModel
                       if (nextDefaultModel) {
                         setSelectedModel(nextDefaultModel)
@@ -333,6 +362,7 @@ export function ChatPage() {
                     aria-label="Model"
                     className="h-8 min-w-[170px] rounded-full border border-input bg-transparent px-3 text-xs"
                     value={selectedModel}
+                    disabled={providerId === "ollama" && ollamaModels.loading && modelOptions.length === 0}
                     onChange={(e) => {
                       setSelectedModel(e.target.value)
                       void updateAgentModel(e.target.value)
@@ -345,6 +375,16 @@ export function ChatPage() {
                     ))}
                     {selectedModel && !modelOptions.some((m) => m.id === selectedModel) && <option value={selectedModel}>{selectedModel}</option>}
                   </select>
+                  {providerId === "ollama" && ollamaModels.error && !ollamaModels.loading && (
+                    <span className="text-[10px] text-destructive max-w-[140px] truncate" title={ollamaModels.error}>
+                      Ollama: {ollamaModels.error}
+                    </span>
+                  )}
+                  {providerId === "ollama" && agentHasSkills && !ollamaModels.loading && ollamaModels.options.length > 0 && modelOptions.length === 0 && (
+                    <span className="text-[10px] text-destructive max-w-[160px]" title="No tool-capable model">
+                      No tool-capable model
+                    </span>
+                  )}
                 </div>
                 {sending ? (
                   <Button type="button" variant="outline" onClick={stopSending} className="h-8 rounded-full px-3">Stop</Button>

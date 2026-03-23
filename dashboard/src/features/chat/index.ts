@@ -1,5 +1,5 @@
 export { ChatPage } from "./views/ChatPage"
 export type { ChatMessage, ToolCallStep, TokenUsage } from "./types/chat.types"
 export { ChatNavProvider, useChatNav } from "./contexts/chat-nav-context"
-export { useChatSession } from "./hooks/useChatSession"
+export { ChatSessionProvider, useChatSession } from "./hooks/useChatSession"
 export { chatRoute } from "./routes"

@@ -33,6 +33,8 @@ export interface LLMResponse {
 import { readConfig } from "./config.js";
 import { normalizeOllamaOpenAiBase, defaultOllamaOpenAiBaseFromEnv } from "./ollama.js";
 
+const CUSTOM_PREFIX = "custom/";
+
 /** Legacy Claude model ids (bare) → OpenRouter anthropic/... id. */
 const CLAUDE_LEGACY_TO_OPENROUTER: Record<string, string> = {
   "claude-3-5-sonnet-20241022": "anthropic/claude-3.5-sonnet",
@@ -117,6 +119,25 @@ async function getApiConfig(model: string): Promise<{ base: string; key: string;
     const base = normalizeOllamaOpenAiBase(baseRaw);
     const key =
       process.env.OLLAMA_API_KEY?.trim() || config.ollama_api_key?.trim() || "ollama";
+    return { base, key, model: bare };
+  }
+
+  // User-configured OpenAI-compatible API (Settings → AI Provider, or CUSTOM_OPENAI_* env).
+  if (effectiveModel.startsWith(CUSTOM_PREFIX)) {
+    const bare = effectiveModel.slice(CUSTOM_PREFIX.length).trim();
+    if (!bare) {
+      throw new Error("Invalid custom model: use e.g. custom/gpt-4o-mini");
+    }
+    const baseRaw =
+      process.env.CUSTOM_OPENAI_API_BASE?.trim() || config.custom_openai_base_url?.trim();
+    const key =
+      process.env.CUSTOM_OPENAI_API_KEY?.trim() || config.custom_openai_api_key?.trim();
+    if (!baseRaw || !key) {
+      throw new Error(
+        "Custom OpenAI-compatible API requires base URL and API key in Settings → AI Provider (or CUSTOM_OPENAI_API_BASE and CUSTOM_OPENAI_API_KEY)."
+      );
+    }
+    const base = normalizeOllamaOpenAiBase(baseRaw);
     return { base, key, model: bare };
   }
 

@@ -12,12 +12,13 @@ import { useChatSession } from "../hooks/useChatSession"
 import type { TokenUsage } from "../types/chat.types"
 import {
   AI_PROVIDERS,
+  displayProviderFromModel,
   filterOllamaModelsForAgentSkills,
   getModelsForProvider,
-  inferProviderFromModel,
   normalizeModelIdForDisplay,
   type AIProviderId,
 } from "@/features/agents/ai-providers"
+import { useDefaultCustomEndpointModelId } from "@/features/agents/hooks/useDefaultCustomEndpointModelId"
 import { useOllamaModels } from "@/features/agents/hooks/useOllamaModels"
 
 const DEFAULT_AVATAR = "agent1.jpg"
@@ -96,16 +97,15 @@ export function ChatPage() {
   } = useChatSession()
   const selectedAgent = agents.find((a) => a.id === agentId)
   const agentHasSkills = (selectedAgent?.skills?.length ?? 0) > 0
-  const providerOptions = useMemo(() => AI_PROVIDERS.filter((p) => p.id !== "custom"), [])
+  const providerOptions = useMemo(() => AI_PROVIDERS, [])
+  const defaultCustomEndpointModelId = useDefaultCustomEndpointModelId()
   const [providerId, setProviderId] = useState<AIProviderId>("openai")
   const [selectedModel, setSelectedModel] = useState("")
 
   useEffect(() => {
     if (!selectedAgent) return
     const normalized = normalizeModelIdForDisplay(selectedAgent.model || "")
-    const inferred = inferProviderFromModel(normalized)
-    const nextProvider = inferred === "custom" ? "openrouter" : inferred
-    setProviderId(nextProvider)
+    setProviderId(displayProviderFromModel(normalized))
     setSelectedModel(normalized)
   }, [selectedAgent?.id, selectedAgent?.model])
 
@@ -309,6 +309,17 @@ export function ChatPage() {
                           <span>~${estimateCost(m.usage, m.model).toFixed(4)}</span>
                         </>
                       )}
+                      {m.role === "assistant" && m.artifact?.kind === "web_preview" && convAgentId && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-5 px-2 text-[10px]"
+                          onClick={() => window.open(getWorkspaceFileUrl(convAgentId, m.artifact!.filename), "_blank", "noopener,noreferrer")}
+                        >
+                          Preview
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -343,6 +354,11 @@ export function ChatPage() {
                       const nextProvider = e.target.value as AIProviderId
                       setProviderId(nextProvider)
                       if (nextProvider === "ollama") {
+                        return
+                      }
+                      if (nextProvider === "custom") {
+                        setSelectedModel(defaultCustomEndpointModelId)
+                        void updateAgentModel(defaultCustomEndpointModelId)
                         return
                       }
                       const nextDefaultModel = getModelsForProvider(nextProvider)[0]?.id ?? selectedModel

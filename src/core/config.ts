@@ -82,6 +82,12 @@ export interface AgentOsConfig {
   ollama_default_model?: string;
   /** Optional Bearer token for Ollama; local default is often unnecessary. */
   ollama_api_key?: string;
+  /** OpenAI-compatible API base for models with id prefix `custom/` (e.g. https://api.example.com/v1). */
+  custom_openai_base_url?: string;
+  /** Bearer API key for the custom OpenAI-compatible endpoint. */
+  custom_openai_api_key?: string;
+  /** Model name segment after `custom/` when picking a default (e.g. gpt-4o-mini). */
+  custom_openai_default_model?: string;
 }
 
 export interface McpServerConfig {
@@ -204,6 +210,9 @@ export async function readConfig(): Promise<AgentOsConfig> {
       const ollama_base_url = o.ollama_base_url;
       const ollama_default_model = o.ollama_default_model;
       const ollama_api_key = o.ollama_api_key;
+      const custom_openai_base_url = o.custom_openai_base_url;
+      const custom_openai_api_key = o.custom_openai_api_key;
+      const custom_openai_default_model = o.custom_openai_default_model;
       return {
         provider:
           provider === "openrouter" || provider === "openai"
@@ -235,6 +244,12 @@ export async function readConfig(): Promise<AgentOsConfig> {
         ollama_default_model:
           typeof ollama_default_model === "string" ? ollama_default_model.trim() || undefined : undefined,
         ollama_api_key: typeof ollama_api_key === "string" ? ollama_api_key.trim() || undefined : undefined,
+        custom_openai_base_url:
+          typeof custom_openai_base_url === "string" ? custom_openai_base_url.trim() || undefined : undefined,
+        custom_openai_api_key:
+          typeof custom_openai_api_key === "string" ? custom_openai_api_key.trim() || undefined : undefined,
+        custom_openai_default_model:
+          typeof custom_openai_default_model === "string" ? custom_openai_default_model.trim() || undefined : undefined,
       };
     }
   } catch (err) {
@@ -275,6 +290,17 @@ export async function getDefaultModelForAvailableProvider(): Promise<string | nu
     config.openai_api_key?.trim() ||
     (config.provider === "openai" ? config.api_key?.trim() : undefined);
   if (openaiKey) return DEFAULT_MODEL_BY_PROVIDER.openai;
+  const customBase =
+    process.env.CUSTOM_OPENAI_API_BASE?.trim() || config.custom_openai_base_url?.trim();
+  const customKey =
+    process.env.CUSTOM_OPENAI_API_KEY?.trim() || config.custom_openai_api_key?.trim();
+  if (customBase && customKey) {
+    const tag =
+      process.env.CUSTOM_OPENAI_DEFAULT_MODEL?.trim() ||
+      config.custom_openai_default_model?.trim() ||
+      "gpt-4o-mini";
+    return `custom/${tag}`;
+  }
   if (config.ollama_enabled === true) {
     const tag = config.ollama_default_model?.trim() || "qwen3";
     return `ollama/${tag}`;
@@ -322,6 +348,14 @@ export async function writeConfig(updates: Partial<AgentOsConfig>): Promise<void
     ollama_default_model:
       updates.ollama_default_model !== undefined ? updates.ollama_default_model : current.ollama_default_model,
     ollama_api_key: updates.ollama_api_key !== undefined ? updates.ollama_api_key : current.ollama_api_key,
+    custom_openai_base_url:
+      updates.custom_openai_base_url !== undefined ? updates.custom_openai_base_url : current.custom_openai_base_url,
+    custom_openai_api_key:
+      updates.custom_openai_api_key !== undefined ? updates.custom_openai_api_key : current.custom_openai_api_key,
+    custom_openai_default_model:
+      updates.custom_openai_default_model !== undefined
+        ? updates.custom_openai_default_model
+        : current.custom_openai_default_model,
   };
   const home = getAgentOsHome();
   const path = getConfigPath();
@@ -356,6 +390,9 @@ export async function writeConfig(updates: Partial<AgentOsConfig>): Promise<void
         ollama_base_url: merged.ollama_base_url ?? null,
         ollama_default_model: merged.ollama_default_model ?? null,
         ollama_api_key: merged.ollama_api_key ?? null,
+        custom_openai_base_url: merged.custom_openai_base_url ?? null,
+        custom_openai_api_key: merged.custom_openai_api_key ?? null,
+        custom_openai_default_model: merged.custom_openai_default_model ?? null,
       },
       null,
       2

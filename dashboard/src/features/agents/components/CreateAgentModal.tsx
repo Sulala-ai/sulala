@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { X } from "lucide-react"
 import { AI_PROVIDERS, filterOllamaModelsForAgentSkills, getModelsForProvider, type AIProviderId } from "../ai-providers"
+import { useDefaultCustomEndpointModelId } from "../hooks/useDefaultCustomEndpointModelId"
 import { useOllamaModels } from "../hooks/useOllamaModels"
 
 interface CreateAgentModalProps {
@@ -50,6 +51,7 @@ export function CreateAgentModal({
   availableAvatars,
   onCreate,
 }: CreateAgentModalProps) {
+  const defaultCustomEndpointModelId = useDefaultCustomEndpointModelId()
   const ollamaModels = useOllamaModels(open && createProvider === "ollama")
   const hasSkills = (createForm.skills?.length ?? 0) > 0
 
@@ -165,7 +167,11 @@ export function CreateAgentModal({
                   onChange={(e) => {
                     const p = e.target.value as AIProviderId
                     setCreateProvider(p)
-                    if (p !== "custom" && p !== "ollama") {
+                    if (p === "custom") {
+                      setCreateForm((f) => ({ ...f, model: defaultCustomEndpointModelId }))
+                      return
+                    }
+                    if (p !== "ollama") {
                       const models = getModelsForProvider(p)
                       setCreateForm((f) => ({ ...f, model: models[0]?.id ?? f.model }))
                     }
@@ -182,7 +188,12 @@ export function CreateAgentModal({
               <div>
                 <Label>Model</Label>
                 {createProvider === "custom" ? (
-                  <Input placeholder="e.g. gpt-4o-mini or openai/gpt-4o" value={createForm.model} onChange={(e) => setCreateForm((f) => ({ ...f, model: e.target.value }))} className="mt-1" />
+                  <Input
+                    placeholder="e.g. custom/my-model (Settings → custom API) or openai/gpt-4o (OpenRouter)"
+                    value={createForm.model}
+                    onChange={(e) => setCreateForm((f) => ({ ...f, model: e.target.value }))}
+                    className="mt-1"
+                  />
                 ) : (
                   <>
                     {createProvider === "ollama" && ollamaModels.loading && (

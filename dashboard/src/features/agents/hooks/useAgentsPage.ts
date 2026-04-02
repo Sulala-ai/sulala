@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { api, type AgentSummary, type CreateAgentPayload, type SkillSummary, type ScheduleReportTarget } from "@/lib/api"
 import { type AIProviderId } from "../ai-providers"
-import { inferProviderFromModel, normalizeModelIdForDisplay } from "../ai-providers"
+import { displayProviderFromModel, normalizeModelIdForDisplay } from "../ai-providers"
 
 const DEFAULT_AVATAR = "agent1.jpg"
 const AVATARS_JSON_URL = "/media/avatars.json"
@@ -219,7 +219,7 @@ export function useAgentsPage() {
       schedule: agent.schedule ?? "",
       schedule_input: agent.schedule_input ?? "",
     })
-    setEditProvider(inferProviderFromModel(rawModel))
+    setEditProvider(displayProviderFromModel(rawModel))
     setEditError(null)
   }
 

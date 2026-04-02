@@ -3,7 +3,7 @@
  * Phase 3: skills + tools.
  */
 
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentConfig } from "../types/agent.js";
 import { callLLM, callLLMStream } from "./llm.js";
@@ -45,13 +45,23 @@ export interface RunResult {
   usage?: { input_tokens: number; output_tokens: number };
   /** Model used (for cost estimation). */
   model?: string;
+  /** Optional generated web preview artifact when output includes html/css/js JSON. */
+  artifact?: { kind: "web_preview"; filename: string };
 }
 
 /** Stream event: assistant delta, tool_call result, done, or error. */
 export type AgentStreamEvent =
   | { type: "assistant"; delta: string }
   | { type: "tool_call"; name: string; result?: unknown; error?: string }
-  | { type: "done"; finalContent: string; turnCount: number; usage?: { input_tokens: number; output_tokens: number }; model?: string; steps?: ToolCallStep[] }
+  | {
+      type: "done";
+      finalContent: string;
+      turnCount: number;
+      usage?: { input_tokens: number; output_tokens: number };
+      model?: string;
+      steps?: ToolCallStep[];
+      artifact?: { kind: "web_preview"; filename: string };
+    }
   | { type: "error"; message: string };
 
 const MAX_HISTORY_TURNS = 20; // cap to avoid context overflow
@@ -77,6 +87,67 @@ function formatLLMErrorForUser(err: unknown): string {
 
 const RATE_LIMIT_RETRIES = 3;
 const RATE_LIMIT_BACKOFF_MS = [2000, 4000, 8000];
+
+function parseWebBundleFromText(text: string): { html: string; css?: string; js?: string } | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  let candidate = trimmed;
+  const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenceMatch?.[1]) candidate = fenceMatch[1].trim();
+  try {
+    const parsed = JSON.parse(candidate) as Record<string, unknown>;
+    if (typeof parsed.html !== "string" || parsed.html.trim() === "") return null;
+    const css = typeof parsed.css === "string" ? parsed.css : "";
+    const js = typeof parsed.js === "string" ? parsed.js : "";
+    return { html: parsed.html, css, js };
+  } catch {
+    // Not JSON output; continue below for raw/fenced HTML detection.
+  }
+  // Handle responses like:
+  // 1) raw full HTML document
+  // 2) markdown fenced ```html ... ```
+  // 3) prose + embedded HTML document
+  let htmlCandidate = trimmed;
+  const htmlFenceMatch = trimmed.match(/```html\s*([\s\S]*?)```/i);
+  if (htmlFenceMatch?.[1]) htmlCandidate = htmlFenceMatch[1].trim();
+  const docStart = htmlCandidate.search(/<!doctype\s+html>|<html[\s>]/i);
+  if (docStart >= 0) {
+    const fullDoc = htmlCandidate.slice(docStart).trim();
+    if (fullDoc) return { html: fullDoc, css: "", js: "" };
+  }
+  return null;
+}
+
+function embedCssAndJs(html: string, css?: string, js?: string): string {
+  let out = html;
+  const safeCss = (css ?? "").trim();
+  const safeJs = (js ?? "").trim();
+  if (safeCss) {
+    if (/<\/head>/i.test(out)) {
+      out = out.replace(/<\/head>/i, `<style>\n${safeCss}\n</style>\n</head>`);
+    } else {
+      out = `<style>\n${safeCss}\n</style>\n${out}`;
+    }
+  }
+  if (safeJs) {
+    if (/<\/body>/i.test(out)) {
+      out = out.replace(/<\/body>/i, `<script>\n${safeJs}\n</script>\n</body>`);
+    } else {
+      out = `${out}\n<script>\n${safeJs}\n</script>\n`;
+    }
+  }
+  return out;
+}
+
+async function maybeCreateWebPreviewArtifact(agentId: string, text: string): Promise<{ kind: "web_preview"; filename: string } | undefined> {
+  const bundle = parseWebBundleFromText(text);
+  if (!bundle) return undefined;
+  const mergedHtml = embedCssAndJs(bundle.html, bundle.css, bundle.js);
+  const filename = `generated-preview-${Date.now()}.html`;
+  const absolutePath = join(getWorkspaceDir(agentId), filename);
+  await writeFile(absolutePath, mergedHtml, "utf-8");
+  return { kind: "web_preview", filename };
+}
 
 /** Call LLM with retries on 429 (rate limit). Reduces "Request limit reached" failures for pipelines. */
 async function callLLMWithRetry(
@@ -350,6 +421,7 @@ function runAgentInner(options: RunOptions): Promise<RunResult> {
     if (!finalOutput) finalOutput = `Used ${toolCallCount} tool(s). Model did not return a summary.`;
   }
 
+  const artifact = await maybeCreateWebPreviewArtifact(agent.id, finalOutput);
   return {
     success: true,
     output: finalOutput,
@@ -361,6 +433,7 @@ function runAgentInner(options: RunOptions): Promise<RunResult> {
         ? { input_tokens: totalInputTokens, output_tokens: totalOutputTokens }
         : undefined,
     model: agent.model,
+    artifact,
   };
   })();
 }
@@ -578,6 +651,7 @@ export async function runAgentStream(options: RunOptions, onEvent: (ev: AgentStr
       if (!finalOutput) finalOutput = `Used ${toolCallCount} tool(s). Model did not return a summary.`;
     }
 
+    const artifact = await maybeCreateWebPreviewArtifact(agent.id, finalOutput);
     onEvent({
       type: "done",
       finalContent: finalOutput,
@@ -588,6 +662,7 @@ export async function runAgentStream(options: RunOptions, onEvent: (ev: AgentStr
           : undefined,
       model: agent.model,
       steps: steps.length > 0 ? steps : undefined,
+      artifact,
     });
   } catch (err) {
     const msg = formatLLMErrorForUser(err);

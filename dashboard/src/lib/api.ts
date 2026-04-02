@@ -237,6 +237,11 @@ export interface ConversationSummary {
   created_at: string;
 }
 
+export interface GeneratedArtifact {
+  kind: "web_preview";
+  filename: string;
+}
+
 export interface MemoryGraphNode {
   id: string;
   type: "agent" | "memory" | "tag" | (string & {});
@@ -344,6 +349,7 @@ export const api = {
     steps?: Array<{ tool: string; args?: unknown; result?: unknown; error?: string }>;
     usage?: { input_tokens: number; output_tokens: number };
     model?: string;
+    artifact?: GeneratedArtifact;
   }> {
     return fetchJson("/api/agents/run", {
       method: "POST",
@@ -390,6 +396,7 @@ export const api = {
         usage?: { input_tokens: number; output_tokens: number };
         model?: string;
         steps?: Array<{ tool: string; args?: unknown; result?: unknown; error?: string }>;
+        artifact?: GeneratedArtifact;
       }) => void;
       onError?: (message: string) => void;
     }
@@ -449,6 +456,13 @@ export const api = {
                   usage: data.usage as { input_tokens: number; output_tokens: number } | undefined,
                   model: typeof data.model === "string" ? data.model : undefined,
                   steps: Array.isArray(data.steps) ? (data.steps as Array<{ tool: string; args?: unknown; result?: unknown; error?: string }>) : undefined,
+                  artifact:
+                    data.artifact &&
+                    typeof data.artifact === "object" &&
+                    (data.artifact as { kind?: unknown }).kind === "web_preview" &&
+                    typeof (data.artifact as { filename?: unknown }).filename === "string"
+                      ? { kind: "web_preview", filename: (data.artifact as { filename: string }).filename }
+                      : undefined,
                 });
               } else if (currentEvent === "error" && typeof data.message === "string") {
                 options.onError?.(data.message);
@@ -643,6 +657,9 @@ export const api = {
     ollama_base_url?: string | null;
     ollama_default_model?: string | null;
     has_ollama_api_key?: boolean;
+    custom_openai_base_url?: string | null;
+    has_custom_openai_key?: boolean;
+    custom_openai_default_model?: string | null;
   }> {
     return fetchJson("/api/settings");
   },
@@ -671,6 +688,9 @@ export const api = {
     ollama_base_url?: string | null;
     ollama_default_model?: string | null;
     ollama_api_key?: string | null;
+    custom_openai_base_url?: string | null;
+    custom_openai_api_key?: string | null;
+    custom_openai_default_model?: string | null;
   }): Promise<{ ok: boolean }> {
     return fetchJson("/api/settings", {
       method: "PUT",

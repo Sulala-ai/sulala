@@ -31,6 +31,8 @@ export function AiProviderForm({ compact, onHasKeyChange }: AiProviderFormProps)
   const [hasKeys, setHasKeys] = useState<Record<string, boolean>>({})
   const [ollamaEnabled, setOllamaEnabled] = useState(false)
   const [keys, setKeys] = useState<Record<string, string>>({})
+  const [customBase, setCustomBase] = useState("")
+  const [customDefaultModel, setCustomDefaultModel] = useState("")
   const [touched, setTouched] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(true)
   const [saved, setSaved] = useState(false)
@@ -41,14 +43,16 @@ export function AiProviderForm({ compact, onHasKeyChange }: AiProviderFormProps)
     api
       .getSettings()
       .then((r) => {
-        const next = {
+        setHasKeys({
           openai: r.has_openai_key ?? false,
           anthropic: r.has_anthropic_key ?? false,
           google: r.has_google_key ?? false,
           openrouter: r.has_openrouter_key ?? false,
-        }
-        setHasKeys(next)
+          custom_openai: Boolean(r.custom_openai_base_url?.trim() && r.has_custom_openai_key),
+        })
         setOllamaEnabled(r.ollama_enabled === true)
+        setCustomBase(r.custom_openai_base_url ?? "")
+        setCustomDefaultModel(r.custom_openai_default_model ?? "")
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
@@ -57,7 +61,8 @@ export function AiProviderForm({ compact, onHasKeyChange }: AiProviderFormProps)
   useEffect(() => {
     if (loading) return
     const hasCloud = AI_PROVIDER_OPTIONS.some((o) => hasKeys[o.id])
-    onHasKeyChange?.(hasCloud || ollamaEnabled)
+    const hasCustom = Boolean(hasKeys.custom_openai)
+    onHasKeyChange?.(hasCloud || ollamaEnabled || hasCustom)
   }, [loading, hasKeys, ollamaEnabled, onHasKeyChange])
 
   function handleSave(e: React.FormEvent) {
@@ -69,21 +74,35 @@ export function AiProviderForm({ compact, onHasKeyChange }: AiProviderFormProps)
       anthropic_api_key?: string | null
       google_api_key?: string | null
       openrouter_api_key?: string | null
+      custom_openai_base_url?: string | null
+      custom_openai_api_key?: string | null
+      custom_openai_default_model?: string | null
     } = {}
     if (touched.openai) payload.openai_api_key = keys.openai?.trim() || null
     if (touched.anthropic) payload.anthropic_api_key = keys.anthropic?.trim() || null
     if (touched.google) payload.google_api_key = keys.google?.trim() || null
     if (touched.openrouter) payload.openrouter_api_key = keys.openrouter?.trim() || null
+    if (touched.custom_base) payload.custom_openai_base_url = customBase.trim() || null
+    if (touched.custom_key) payload.custom_openai_api_key = keys.custom_openai?.trim() || null
+    if (touched.custom_default) payload.custom_openai_default_model = customDefaultModel.trim() || null
     api
       .saveSettings(payload)
-      .then(() => {
-        setHasKeys((prev) => ({
+      .then(() => api.getSettings())
+      .then((r) => {
+        setHasKeys({
+          openai: r.has_openai_key ?? false,
+          anthropic: r.has_anthropic_key ?? false,
+          google: r.has_google_key ?? false,
+          openrouter: r.has_openrouter_key ?? false,
+          custom_openai: Boolean(r.custom_openai_base_url?.trim() && r.has_custom_openai_key),
+        })
+        setCustomBase(r.custom_openai_base_url ?? "")
+        setCustomDefaultModel(r.custom_openai_default_model ?? "")
+        setKeys((prev) => ({
           ...prev,
-          ...Object.fromEntries(
-            AI_PROVIDER_OPTIONS.filter((o) => touched[o.id]).map((o) => [o.id, Boolean(keys[o.id]?.trim())])
-          ),
+          ...Object.fromEntries(AI_PROVIDER_OPTIONS.filter((o) => touched[o.id]).map((o) => [o.id, ""])),
+          ...(touched.custom_key ? { custom_openai: "" } : {}),
         }))
-        setKeys((prev) => ({ ...prev, ...Object.fromEntries(AI_PROVIDER_OPTIONS.filter((o) => touched[o.id]).map((o) => [o.id, ""])) }))
         setTouched({})
         setSaved(true)
         setTimeout(() => setSaved(false), 2000)
@@ -127,6 +146,62 @@ export function AiProviderForm({ compact, onHasKeyChange }: AiProviderFormProps)
           {!compact && <p className="text-xs text-muted-foreground">{opt.hint}</p>}
         </div>
       ))}
+      <div className="space-y-2 border-t pt-6">
+        <Label htmlFor="custom-openai-base">Custom (OpenAI-compatible API)</Label>
+        <Input
+          id="custom-openai-base"
+          type="url"
+          autoComplete="off"
+          placeholder="https://your-host/v1 or https://your-host ( /v1 added automatically )"
+          value={customBase}
+          onChange={(e) => {
+            setCustomBase(e.target.value)
+            setTouched((t) => ({ ...t, custom_base: true }))
+          }}
+          className="font-mono text-sm"
+        />
+        {!compact && (
+          <p className="text-xs text-muted-foreground">
+            Any OpenAI-compatible <code className="text-xs">/v1/chat/completions</code> endpoint. Use agent model id{" "}
+            <code className="text-xs">custom/your-model-name</code>. Env: <code className="text-xs">CUSTOM_OPENAI_API_BASE</code>,{" "}
+            <code className="text-xs">CUSTOM_OPENAI_API_KEY</code>.
+          </p>
+        )}
+        <Label htmlFor="custom-openai-key" className="pt-2 block">
+          API key (custom endpoint)
+        </Label>
+        <Input
+          id="custom-openai-key"
+          type="password"
+          autoComplete="off"
+          placeholder={
+            hasKeys.custom_openai && !touched.custom_key
+              ? "•••••••• (leave blank to keep, or enter new to replace)"
+              : "Bearer token for the custom API…"
+          }
+          value={keys.custom_openai ?? ""}
+          onChange={(e) => {
+            setKeys((k) => ({ ...k, custom_openai: e.target.value }))
+            setTouched((t) => ({ ...t, custom_key: true }))
+          }}
+          className="font-mono text-sm"
+        />
+        <Label htmlFor="custom-openai-default" className="pt-2 block">
+          Default model name (optional)
+        </Label>
+        <Input
+          id="custom-openai-default"
+          type="text"
+          autoComplete="off"
+          placeholder="e.g. gpt-4o-mini (default installs use custom/ plus this name)"
+          value={customDefaultModel}
+          onChange={(e) => {
+            setCustomDefaultModel(e.target.value)
+            setTouched((t) => ({ ...t, custom_default: true }))
+          }}
+          className="font-mono text-sm"
+        />
+      </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
       <Button type="submit" disabled={saving || !Object.keys(touched).length}>
         {saved ? "Saved" : saving ? "Saving…" : "Save"}
@@ -158,7 +233,7 @@ export function AiProviderForm({ compact, onHasKeyChange }: AiProviderFormProps)
         <CardHeader>
           <CardTitle>AI API keys</CardTitle>
           <CardDescription>
-            Add API keys for the providers you use. Stored in ~/.agent-os on the server. Env vars override if set. Agents use OpenAI or OpenRouter depending on the model (e.g. openai/gpt-4o uses OpenRouter).
+            Add API keys for the providers you use. Stored in ~/.agent-os on the server. Env vars override if set. Agents use OpenAI or OpenRouter depending on the model (e.g. openai/gpt-4o uses OpenRouter). For a private OpenAI-compatible server, set the custom base URL and key, then use model ids like custom/your-model.
           </CardDescription>
         </CardHeader>
         <CardContent>{formContent}</CardContent>

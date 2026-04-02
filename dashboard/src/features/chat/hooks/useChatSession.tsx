@@ -4,7 +4,14 @@ import { useChatNav } from "../contexts/chat-nav-context"
 import type { ChatMessage, ToolCallStep, TokenUsage } from "../types/chat.types"
 
 function mapConversationMessage(
-  content: { text?: string; steps?: ToolCallStep[]; timestamp?: string; usage?: TokenUsage; model?: string } | string,
+  content: {
+    text?: string;
+    steps?: ToolCallStep[];
+    timestamp?: string;
+    usage?: TokenUsage;
+    model?: string;
+    artifact?: { kind?: unknown; filename?: unknown };
+  } | string,
   role: "user" | "assistant",
 ): ChatMessage {
   const text =
@@ -24,7 +31,15 @@ function mapConversationMessage(
       ? content.usage
       : undefined
   const model = typeof content === "object" && content !== null && typeof content.model === "string" ? content.model : undefined
-  return { role, content: text, steps, timestamp, usage, model }
+  const artifact =
+    typeof content === "object" &&
+    content !== null &&
+    content.artifact &&
+    content.artifact.kind === "web_preview" &&
+    typeof content.artifact.filename === "string"
+      ? { kind: "web_preview" as const, filename: content.artifact.filename }
+      : undefined
+  return { role, content: text, steps, timestamp, usage, model, artifact }
 }
 
 function useProvideChatSession() {
@@ -169,17 +184,26 @@ function useProvideChatSession() {
                 timestamp: assistantTimestamp,
                 usage: data.usage,
                 model: data.model,
+                artifact: data.artifact,
               }
             }
             return next
           })
-          const savedContent: { text: string; steps?: ToolCallStep[]; timestamp: string; usage?: TokenUsage; model?: string } = {
+          const savedContent: {
+            text: string;
+            steps?: ToolCallStep[];
+            timestamp: string;
+            usage?: TokenUsage;
+            model?: string;
+            artifact?: { kind: "web_preview"; filename: string };
+          } = {
             text: data.finalContent,
             timestamp: assistantTimestamp,
           }
           if (data.steps?.length) savedContent.steps = data.steps
           if (data.usage) savedContent.usage = data.usage
           if (data.model) savedContent.model = data.model
+          if (data.artifact) savedContent.artifact = data.artifact
           api.saveConversationMessage({ conversation_id: convId, agent_id: agentId, role: "assistant", content: savedContent }).catch(() => {})
           api
             .getConversations({ agent_id: agentId, limit: 50 })

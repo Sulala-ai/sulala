@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { X, FileText } from "lucide-react"
 import { AI_PROVIDERS, filterOllamaModelsForAgentSkills, getModelsForProvider, type AIProviderId } from "../ai-providers"
+import { useDefaultCustomEndpointModelId } from "../hooks/useDefaultCustomEndpointModelId"
 import { useOllamaModels } from "../hooks/useOllamaModels"
 
 interface EditAgentModalProps {
@@ -77,6 +78,7 @@ export function EditAgentModal({
   saveEditedAgent,
   onAgentSaved,
 }: EditAgentModalProps) {
+  const defaultCustomEndpointModelId = useDefaultCustomEndpointModelId()
   const ollamaModels = useOllamaModels(Boolean(open && editProvider === "ollama"))
   const hasSkills = (editForm.skills?.length ?? 0) > 0
 
@@ -123,7 +125,11 @@ export function EditAgentModal({
                 onChange={(e) => {
                   const p = e.target.value as AIProviderId
                   setEditProvider(p)
-                  if (p !== "custom" && p !== "ollama") {
+                  if (p === "custom") {
+                    setEditForm((f) => ({ ...f, model: defaultCustomEndpointModelId }))
+                    return
+                  }
+                  if (p !== "ollama") {
                     const models = getModelsForProvider(p)
                     setEditForm((f) => ({ ...f, model: models[0]?.id ?? f.model }))
                   }
@@ -140,7 +146,12 @@ export function EditAgentModal({
             <div>
               <Label>Model</Label>
               {editProvider === "custom" ? (
-                <Input value={editForm.model} onChange={(e) => setEditForm((f) => ({ ...f, model: e.target.value }))} placeholder="e.g. gpt-4o-mini" className="mt-1" />
+                <Input
+                  value={editForm.model}
+                  onChange={(e) => setEditForm((f) => ({ ...f, model: e.target.value }))}
+                  placeholder="e.g. custom/my-model (Settings) or gpt-4o-mini"
+                  className="mt-1"
+                />
               ) : (
                 <>
                   {editProvider === "ollama" && ollamaModels.loading && (

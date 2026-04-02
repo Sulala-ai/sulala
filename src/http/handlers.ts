@@ -141,6 +141,7 @@ export async function handleRunStream(req: Request, memoryStore: MemoryStore): P
                   usage: ev.usage,
                   model: ev.model,
                   steps: ev.steps,
+                  artifact: ev.artifact,
                 })
               )
             );
@@ -344,6 +345,9 @@ export async function handleSettings(req: Request): Promise<Response> {
       ollama_base_url: config.ollama_base_url ?? null,
       ollama_default_model: config.ollama_default_model ?? null,
       has_ollama_api_key: Boolean(config.ollama_api_key?.trim()),
+      custom_openai_base_url: config.custom_openai_base_url ?? null,
+      has_custom_openai_key: Boolean(config.custom_openai_api_key?.trim()),
+      custom_openai_default_model: config.custom_openai_default_model ?? null,
     });
   }
   if (req.method === "PUT") {
@@ -372,6 +376,9 @@ export async function handleSettings(req: Request): Promise<Response> {
       viber_auth_token?: string | null;
       viber_default_agent_id?: string | null;
       onboarding_completed?: boolean | null;
+      custom_openai_base_url?: string | null;
+      custom_openai_api_key?: string | null;
+      custom_openai_default_model?: string | null;
     };
     const parsed = await parseJsonBody<typeof body>(req);
     if (!parsed.ok) return parsed.response;
@@ -473,6 +480,20 @@ export async function handleSettings(req: Request): Promise<Response> {
       body.ollama_api_key !== undefined
         ? (typeof body.ollama_api_key === "string" ? body.ollama_api_key.trim() || undefined : undefined)
         : undefined;
+    const custom_openai_base_url =
+      body.custom_openai_base_url !== undefined
+        ? (typeof body.custom_openai_base_url === "string" ? body.custom_openai_base_url.trim() || undefined : undefined)
+        : undefined;
+    const custom_openai_api_key =
+      body.custom_openai_api_key !== undefined
+        ? (typeof body.custom_openai_api_key === "string" ? body.custom_openai_api_key.trim() || undefined : undefined)
+        : undefined;
+    const custom_openai_default_model =
+      body.custom_openai_default_model !== undefined
+        ? (typeof body.custom_openai_default_model === "string"
+            ? body.custom_openai_default_model.trim() || undefined
+            : undefined)
+        : undefined;
     await writeConfig({
       provider: provider ?? current.provider,
       api_key: api_key || undefined,
@@ -499,6 +520,14 @@ export async function handleSettings(req: Request): Promise<Response> {
       ollama_base_url: ollama_base_url !== undefined ? ollama_base_url : current.ollama_base_url,
       ollama_default_model: ollama_default_model !== undefined ? ollama_default_model : current.ollama_default_model,
       ollama_api_key: ollama_api_key !== undefined ? ollama_api_key : current.ollama_api_key,
+      custom_openai_base_url:
+        custom_openai_base_url !== undefined ? custom_openai_base_url : current.custom_openai_base_url,
+      custom_openai_api_key:
+        custom_openai_api_key !== undefined ? custom_openai_api_key : current.custom_openai_api_key,
+      custom_openai_default_model:
+        custom_openai_default_model !== undefined
+          ? custom_openai_default_model
+          : current.custom_openai_default_model,
     });
     return jsonResponse({ ok: true });
   }

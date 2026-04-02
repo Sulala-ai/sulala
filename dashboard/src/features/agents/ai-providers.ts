@@ -29,8 +29,15 @@ export const AI_PROVIDERS: { id: AIProviderId; label: string; hint?: string }[] 
   { id: "google", label: "Google (Gemini)", hint: "Gemini 2.5, multimodal. Set GOOGLE_GENERATIVE_AI_API_KEY or Vertex." },
   { id: "openrouter", label: "OpenRouter", hint: "One API for 400+ models. Set OPENROUTER_API_KEY." },
   { id: "ollama", label: "Ollama (local)", hint: "Free local models. With skills, only models that support tools are listed." },
-  { id: "custom", label: "Custom", hint: "Enter any model id (e.g. for another backend)." },
+  {
+    id: "custom",
+    label: "Custom",
+    hint: "Use model id custom/your-model for an OpenAI-compatible API configured in Settings → AI Provider. Or enter any other model id (e.g. openai/gpt-4o on OpenRouter).",
+  },
 ];
+
+/** Default model id when choosing the Custom provider for a user-configured OpenAI-compatible endpoint. */
+export const DEFAULT_CUSTOM_ENDPOINT_MODEL_ID = "custom/gpt-4o-mini";
 
 const MODELS_OPENAI: AIModelOption[] = [
   { id: "gpt-4o-mini", label: "GPT-4o mini (fast, affordable)" },
@@ -121,6 +128,7 @@ export function inferProviderFromModel(model: string): AIProviderId {
   const m = model.trim();
   if (!m) return "openai";
   if (m.startsWith("ollama/")) return "ollama";
+  if (m.startsWith("custom/")) return "custom";
   if (m.includes("/")) return "openrouter";
   if (MODELS_OPENAI.some((x) => x.id === m)) return "openai";
   if (MODELS_ANTHROPIC.some((x) => x.id === m)) return "anthropic";
@@ -129,4 +137,16 @@ export function inferProviderFromModel(model: string): AIProviderId {
   if (/^claude-[a-z0-9.-]+$/i.test(m)) return "anthropic";
   if (MODELS_OPENROUTER.some((x) => x.id === m)) return "openrouter";
   return "custom";
+}
+
+/**
+ * Provider to show in dropdowns: unknown freeform models map to OpenRouter; `custom/...` stays Custom.
+ */
+export function displayProviderFromModel(model: string): AIProviderId {
+  const m = normalizeModelIdForDisplay(model.trim());
+  const inferred = inferProviderFromModel(m);
+  if (inferred === "custom" && !m.startsWith("custom/")) {
+    return "openrouter";
+  }
+  return inferred;
 }

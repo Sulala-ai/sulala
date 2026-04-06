@@ -46,6 +46,7 @@ export function useAgentsPage() {
     avatar: undefined as string | undefined,
     schedule: "",
     schedule_input: "",
+    auto_memory: false,
   })
   const [editSaving, setEditSaving] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
@@ -180,6 +181,7 @@ export function useAgentsPage() {
         avatar: editForm.avatar ?? null,
         schedule: editForm.schedule.trim() || null,
         schedule_input: editForm.schedule_input.trim() || null,
+        auto_memory: editForm.auto_memory,
       })
       setEditingAgentId(null)
       await loadAgents()
@@ -218,6 +220,7 @@ export function useAgentsPage() {
       avatar: agent.avatar ?? undefined,
       schedule: agent.schedule ?? "",
       schedule_input: agent.schedule_input ?? "",
+      auto_memory: agent.auto_memory ?? false,
     })
     setEditProvider(displayProviderFromModel(rawModel))
     setEditError(null)

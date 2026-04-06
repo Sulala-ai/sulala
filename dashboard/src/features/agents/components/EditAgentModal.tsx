@@ -22,6 +22,7 @@ interface EditAgentModalProps {
     avatar: string | undefined
     schedule: string
     schedule_input: string
+    auto_memory: boolean
   }
   setEditForm: React.Dispatch<
     React.SetStateAction<{
@@ -33,6 +34,7 @@ interface EditAgentModalProps {
       avatar: string | undefined
       schedule: string
       schedule_input: string
+      auto_memory: boolean
     }>
   >
   selectableSkills: Array<{ id: string; name: string }>
@@ -251,6 +253,21 @@ export function EditAgentModal({
               <Label>Scheduled task (optional)</Label>
               <Input placeholder="Task to run on schedule" value={editForm.schedule_input} onChange={(e) => setEditForm((f) => ({ ...f, schedule_input: e.target.value }))} />
             </div>
+          </div>
+          <div className="flex items-center justify-between rounded-lg border px-3 py-2">
+            <div>
+              <p className="text-sm font-medium">Auto-save memory</p>
+              <p className="text-xs text-muted-foreground">Extract and save facts from each conversation to this agent&apos;s long-term memory.</p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={editForm.auto_memory}
+              onClick={() => setEditForm((f) => ({ ...f, auto_memory: !f.auto_memory }))}
+              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${editForm.auto_memory ? "bg-primary" : "bg-input"}`}
+            >
+              <span className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-background shadow-lg transition-transform ${editForm.auto_memory ? "translate-x-4" : "translate-x-0"}`} />
+            </button>
           </div>
           <div className="border-t pt-4 mt-4 space-y-2">
             <div className="flex items-center gap-2 text-sm font-medium">

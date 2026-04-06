@@ -132,19 +132,20 @@ async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
   if (!res.ok) {
     const contentType = res.headers.get("content-type") ?? "";
     if (contentType.includes("application/json")) {
+      let data: unknown;
       try {
-        const data = (await res.json()) as unknown;
-        const msg =
-          typeof data === "object" && data !== null && "error" in data && typeof (data as { error?: unknown }).error === "string"
-            ? (data as { error: string }).error
-            : `API ${res.status}`;
-        const err = new Error(msg) as Error & { status?: number; data?: unknown };
-        err.status = res.status;
-        err.data = data;
-        throw err;
+        data = await res.json();
       } catch {
-        // fallthrough to text
+        throw new Error(`API ${res.status}: ${await res.text()}`);
       }
+      const msg =
+        typeof data === "object" && data !== null && "error" in data && typeof (data as { error?: unknown }).error === "string"
+          ? (data as { error: string }).error
+          : `API ${res.status}`;
+      const err = new Error(msg) as Error & { status?: number; data?: unknown };
+      err.status = res.status;
+      err.data = data;
+      throw err;
     }
     throw new Error(`API ${res.status}: ${await res.text()}`);
   }
@@ -175,6 +176,8 @@ export interface AgentSummary {
   avatar?: string | null;
   /** True when created via the dashboard; only these can be deleted. */
   user_created?: boolean;
+  /** When true, facts are auto-extracted from each chat turn and saved to the agent's long-term memory. */
+  auto_memory?: boolean;
 }
 
 export interface CreateAgentPayload {
@@ -189,6 +192,8 @@ export interface CreateAgentPayload {
   /** Avatar filename (e.g. agent1.jpg). If omitted, server assigns one randomly. */
   avatar?: string;
   limits?: { max_turns?: number; max_runtime?: number; max_tokens?: number };
+  /** When true, auto-extract and save memory facts from each chat turn. */
+  auto_memory?: boolean;
 }
 
 export interface AgentSuggestion {
@@ -284,6 +289,7 @@ export const api = {
       avatar?: string | null;
       schedule_enabled?: boolean | null;
       schedule_report_targets?: ScheduleReportTarget[] | null;
+      auto_memory?: boolean | null;
     }
   ): Promise<{
     ok: boolean;
@@ -330,10 +336,10 @@ export const api = {
     });
   },
 
-  async suggestAgent(prompt: string): Promise<{ suggestion: AgentSuggestion }> {
+  async suggestAgent(prompt: string, model?: string): Promise<{ suggestion: AgentSuggestion }> {
     return fetchJson("/api/agents/suggest", {
       method: "POST",
-      body: JSON.stringify({ prompt: prompt.trim() }),
+      body: JSON.stringify({ prompt: prompt.trim(), ...(model ? { model } : {}) }),
     });
   },
 

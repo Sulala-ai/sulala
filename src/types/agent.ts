@@ -36,6 +36,8 @@ export interface AgentConfig {
   /** True when created via the dashboard; such agents can be deleted. Default/bundled agents omit this. */
   user_created?: boolean;
   limits?: AgentLimits;
+  /** When true, facts are automatically extracted from each conversation turn and saved to the agent's memory. */
+  auto_memory?: boolean;
 }
 
 export function validateAgentConfig(raw: unknown): AgentConfig {
@@ -109,6 +111,9 @@ export function validateAgentConfig(raw: unknown): AgentConfig {
     if (typeof lim.max_tokens === 'number' && lim.max_tokens > 0) {
       config.limits.max_tokens = lim.max_tokens;
     }
+  }
+  if (obj.auto_memory === true) {
+    config.auto_memory = true;
   }
 
   return config;

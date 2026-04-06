@@ -15,8 +15,8 @@ Lightweight **Bun-based Agent Operating System** for **graph-based, collaborativ
 | ![Agent chat](https://raw.githubusercontent.com/Sulala-ai/sulala/main/docs/media/agent_chat.png) | ![Agent social media](https://raw.githubusercontent.com/Sulala-ai/sulala/main/docs/media/agent_social_media.png) | ![Memory](https://raw.githubusercontent.com/Sulala-ai/sulala/main/docs/media/memory.png) |
 | Dashboard access | Channels | Settings |
 | ![Dashboard access](docs/media/auth.png) | ![Channels](docs/media/channel.png) | ![Settings](docs/media/setting.png) |
-| Tasks | | |
-| ![Tasks](docs/media/tasks.png) | | |
+| Tasks | Crypto analysis | |
+| ![Tasks](docs/media/tasks.png) | ![Crypto analysis](dashboard/public/media/crypto_chart.png) | |
 | Welcome (save token) | Onboarding (AI provider) | Local Ollama (settings) |
 | ![Welcome — save your login token](docs/media/welcome.png) | ![Set up in 3 steps — AI provider](docs/media/onboard.png) | ![Local Ollama configuration](docs/media/ollama.png) |
 

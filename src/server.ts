@@ -62,6 +62,7 @@ import { readSkillConfig, writeSkillConfig } from "./core/config.js";
 import { startWorkers, startScheduler } from "./core/tasks.js";
 import { subscribe, type Event, type EventType } from "./core/events.js";
 import { initScheduleReports } from "./core/schedule-reports.js";
+import { initAutoMemory } from "./core/auto-memory-init.js";
 import { listGraphs, loadGraph, saveGraph, deleteGraph } from "./core/graphs.js";
 import { loadPlugins } from "./core/plugins.js";
 import { listSkills, getSkillConfigSchema, getSkillSetupMarkdown, getSkillMarketplace, getStoreRegistry, uninstallSkill, installSystemSkills } from "./skills/loader.js";
@@ -218,6 +219,7 @@ for (const type of EVENT_TYPES) {
   subscribe(type, broadcastEvent);
 }
 initScheduleReports();
+initAutoMemory(memoryStore);
 
 function createRoutes(): Record<string, unknown> {
   return {
@@ -257,6 +259,7 @@ function createRoutes(): Record<string, unknown> {
             tools: a.tools ?? [],
             avatar: a.avatar ?? null,
             user_created: a.user_created ?? false,
+            auto_memory: a.auto_memory ?? false,
           })),
         });
       },
@@ -318,6 +321,7 @@ function createRoutes(): Record<string, unknown> {
             avatar: body.avatar as string | null | undefined,
             schedule_enabled: body.schedule_enabled as boolean | null | undefined,
             schedule_report_targets: Array.isArray(body.schedule_report_targets) ? (body.schedule_report_targets as AgentConfig["schedule_report_targets"]) : undefined,
+            auto_memory: body.auto_memory != null ? Boolean(body.auto_memory) : undefined,
           });
           return jsonResponse({
             ok: true,
@@ -335,6 +339,7 @@ function createRoutes(): Record<string, unknown> {
               schedule_report_targets: agent.schedule_report_targets ?? null,
               avatar: agent.avatar ?? null,
               limits: agent.limits ?? null,
+              auto_memory: agent.auto_memory ?? false,
             },
           });
         } catch (err) {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { api, type CreateAgentPayload, type SkillSummary } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -30,6 +30,19 @@ interface CreateAgentModalProps {
   onCreate: () => Promise<void>
 }
 
+interface SuggestModelOption { id: string; label: string; needs: "openai" | "anthropic" | "google" | "openrouter" | "ollama" }
+
+const ALL_SUGGEST_MODELS: SuggestModelOption[] = [
+  { id: "gpt-4o-mini",               label: "OpenAI · GPT-4o mini",        needs: "openai" },
+  { id: "gpt-4o",                    label: "OpenAI · GPT-4o",             needs: "openai" },
+  { id: "anthropic/claude-haiku-4.5",label: "Anthropic · Claude Haiku",    needs: "anthropic" },
+  { id: "anthropic/claude-sonnet-4.6",label: "Anthropic · Claude Sonnet",  needs: "anthropic" },
+  { id: "google/gemini-2.0-flash",   label: "Google · Gemini 2.0 Flash",   needs: "google" },
+  { id: "google/gemini-2.5-flash",   label: "Google · Gemini 2.5 Flash",   needs: "google" },
+  { id: "openai/gpt-4o-mini",        label: "OpenRouter · GPT-4o mini",    needs: "openrouter" },
+  { id: "openai/gpt-4o",             label: "OpenRouter · GPT-4o",         needs: "openrouter" },
+]
+
 export function CreateAgentModal({
   open,
   onClose,
@@ -54,6 +67,35 @@ export function CreateAgentModal({
   const defaultCustomEndpointModelId = useDefaultCustomEndpointModelId()
   const ollamaModels = useOllamaModels(open && createProvider === "ollama")
   const hasSkills = (createForm.skills?.length ?? 0) > 0
+  const [suggestModel, setSuggestModel] = useState("")
+  const [availableKeys, setAvailableKeys] = useState<{
+    openai: boolean; anthropic: boolean; google: boolean; openrouter: boolean; ollama: boolean
+  } | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    api.getSettings().then((s) => {
+      const keys = {
+        openai: Boolean(s.has_openai_key),
+        anthropic: Boolean(s.has_anthropic_key),
+        google: Boolean(s.has_google_key),
+        openrouter: Boolean(s.has_openrouter_key),
+        ollama: s.ollama_enabled === true,
+      }
+      setAvailableKeys(keys)
+      setSuggestModel((prev) => {
+        if (prev) return prev
+        const best = ALL_SUGGEST_MODELS.find((m) => keys[m.needs] && m.needs !== "google")
+          ?? ALL_SUGGEST_MODELS.find((m) => keys[m.needs])
+        return best?.id ?? ""
+      })
+    }).catch(() => {})
+  }, [open])
+
+  const suggestModelOptions = useMemo(() => {
+    if (!availableKeys) return ALL_SUGGEST_MODELS
+    return ALL_SUGGEST_MODELS.filter((m) => availableKeys[m.needs])
+  }, [availableKeys])
 
   const modelList = useMemo(() => {
     if (createProvider === "ollama") {
@@ -95,15 +137,32 @@ export function CreateAgentModal({
                   onChange={(e) => setDescribePrompt(e.target.value)}
                   rows={3}
                 />
-                <div className="mt-2 flex gap-2">
+                <div className="mt-2 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-muted-foreground shrink-0">Suggest with</label>
+                    {suggestModelOptions.length === 0 ? (
+                      <span className="text-xs text-destructive">No AI provider configured. Add an API key in Settings.</span>
+                    ) : (
+                      <select
+                        value={suggestModel}
+                        onChange={(e) => setSuggestModel(e.target.value)}
+                        className="flex h-8 rounded-md border border-input bg-transparent px-2 py-1 text-xs"
+                      >
+                        {suggestModelOptions.map((m) => (
+                          <option key={m.id} value={m.id}>{m.label}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
                   <Button
                     variant="default"
-                    disabled={suggestLoading || !describePrompt.trim()}
+                    disabled={suggestLoading || !describePrompt.trim() || suggestModelOptions.length === 0}
                     onClick={async () => {
                       setSuggestLoading(true)
                       setSuggestError(null)
                       try {
-                        const { suggestion } = await api.suggestAgent(describePrompt)
+                        const { suggestion } = await api.suggestAgent(describePrompt, suggestModel || undefined)
                         const settings = await api.getSettings()
                         const hasCloud =
                           Boolean(settings.has_openai_key) ||
@@ -134,6 +193,7 @@ export function CreateAgentModal({
                   >
                     {suggestLoading ? "Analyzing…" : "Suggest"}
                   </Button>
+                  </div>
                 </div>
                 {suggestError && <p className="mt-1 text-sm text-destructive">{suggestError}</p>}
               </div>
@@ -293,6 +353,21 @@ export function CreateAgentModal({
                   <Label>Scheduled task (optional)</Label>
                   <Input placeholder="Task to run on schedule" value={createForm.schedule_input ?? ""} onChange={(e) => setCreateForm((f) => ({ ...f, schedule_input: e.target.value || undefined }))} />
                 </div>
+              </div>
+              <div className="flex items-center justify-between rounded-lg border px-3 py-2">
+                <div>
+                  <p className="text-sm font-medium">Auto-save memory</p>
+                  <p className="text-xs text-muted-foreground">Extract and save facts from each conversation to this agent&apos;s long-term memory.</p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={createForm.auto_memory ?? false}
+                  onClick={() => setCreateForm((f) => ({ ...f, auto_memory: !(f.auto_memory ?? false) }))}
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${(createForm.auto_memory ?? false) ? "bg-primary" : "bg-input"}`}
+                >
+                  <span className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-background shadow-lg transition-transform ${(createForm.auto_memory ?? false) ? "translate-x-4" : "translate-x-0"}`} />
+                </button>
               </div>
               {createError && <p className="text-sm text-destructive">{createError}</p>}
               <div className="flex gap-2 pt-2">

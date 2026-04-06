@@ -34,6 +34,7 @@ import {
 } from "../skills/loader.js";
 import { callLLM } from "../core/llm.js";
 import { testMcpServer } from "../mcp/registry.js";
+import { extractAndSaveMemories } from "../core/memory-extractor.js";
 
 function isPlainObject(x: unknown): x is Record<string, unknown> {
   return Boolean(x) && typeof x === "object" && !Array.isArray(x);
@@ -78,6 +79,9 @@ export async function handleRun(req: Request, memoryStore: MemoryStore): Promise
 
   try {
     const result = await runAgent({ agent, task, conversationHistory });
+    if (agent.auto_memory && conversation_id?.trim() && result.output) {
+      void extractAndSaveMemories(memoryStore, agent.id, agent.model, null, conversationHistory, task, result.output);
+    }
     return jsonResponse(result);
   } catch (err) {
     const msg = errorMessage(err);
@@ -133,6 +137,13 @@ export async function handleRunStream(req: Request, memoryStore: MemoryStore): P
           } else if (ev.type === "tool_call") {
             controller.enqueue(encoder.encode(send("tool_call", { name: ev.name, result: ev.result, error: ev.error })));
           } else if (ev.type === "done") {
+            if (agent.auto_memory) {
+              if (conversation_id?.trim() && ev.finalContent) {
+                void extractAndSaveMemories(memoryStore, agent.id, agent.model, null, conversationHistory, effectiveTask, ev.finalContent);
+              } else {
+                console.log(`[memory-extractor] skip stream done: conversation_id=${conversation_id ?? "null"} hasContent=${Boolean(ev.finalContent)}`);
+              }
+            }
             controller.enqueue(
               encoder.encode(
                 send("done", {
@@ -770,7 +781,7 @@ function extractJsonFromContent(content: string): string {
 }
 
 export async function handleAgentSuggest(req: Request): Promise<Response> {
-  const parsed = await parseJsonBody<{ prompt?: string }>(req);
+  const parsed = await parseJsonBody<{ prompt?: string; model?: string }>(req);
   if (!parsed.ok) return parsed.response;
   const prompt = typeof parsed.body.prompt === "string" ? parsed.body.prompt.trim() : "";
   if (!prompt) return jsonResponse({ error: "Missing prompt" }, 400);
@@ -801,7 +812,8 @@ Rules:
 - schedule_input: the task/prompt to run when the schedule fires (e.g. "Summarize today's trending news"). Otherwise "".`;
 
   try {
-    const suggestModel = await getSuggestModelId();
+    const requestedModel = typeof parsed.body.model === "string" ? parsed.body.model.trim() : "";
+    const suggestModel = requestedModel || await getSuggestModelId();
     const res = await callLLM({
       model: suggestModel,
       messages: [
@@ -814,17 +826,17 @@ Rules:
     if (!content) return jsonResponse({ error: "No suggestion from model" }, 502);
 
     const raw = extractJsonFromContent(content);
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    const name = typeof parsed.name === "string" ? parsed.name.trim() : "Agent";
-    const id = typeof parsed.id === "string"
-      ? parsed.id.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, "_").replace(/\s+/g, "_") || "agent"
+    const suggestion_raw = JSON.parse(raw) as Record<string, unknown>;
+    const name = typeof suggestion_raw.name === "string" ? suggestion_raw.name.trim() : "Agent";
+    const id = typeof suggestion_raw.id === "string"
+      ? suggestion_raw.id.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, "_").replace(/\s+/g, "_") || "agent"
       : "agent";
-    const description = typeof parsed.description === "string" ? parsed.description.trim() : "";
-    const skillsOut = Array.isArray(parsed.skills)
-      ? (parsed.skills as unknown[]).filter((s): s is string => typeof s === "string" && skillIds.includes(s))
+    const description = typeof suggestion_raw.description === "string" ? suggestion_raw.description.trim() : "";
+    const skillsOut = Array.isArray(suggestion_raw.skills)
+      ? (suggestion_raw.skills as unknown[]).filter((s): s is string => typeof s === "string" && skillIds.includes(s))
       : [];
-    const schedule = typeof parsed.schedule === "string" ? parsed.schedule.trim() : "";
-    const schedule_input = typeof parsed.schedule_input === "string" ? parsed.schedule_input.trim() : "";
+    const schedule = typeof suggestion_raw.schedule === "string" ? suggestion_raw.schedule.trim() : "";
+    const schedule_input = typeof suggestion_raw.schedule_input === "string" ? suggestion_raw.schedule_input.trim() : "";
 
     const suggestion: AgentSuggestion = {
       name,

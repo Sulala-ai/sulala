@@ -213,6 +213,7 @@ export interface AgentUpdate {
   avatar?: string | null;
   schedule_enabled?: boolean | null;
   schedule_report_targets?: AgentConfig["schedule_report_targets"] | null;
+  auto_memory?: boolean | null;
 }
 
 export async function updateAgent(id: string, updates: AgentUpdate): Promise<AgentConfig> {
@@ -262,6 +263,9 @@ export async function updateAgent(id: string, updates: AgentUpdate): Promise<Age
   }
   if (updates.schedule_report_targets !== undefined) {
     parsed.schedule_report_targets = updates.schedule_report_targets ?? undefined;
+  }
+  if (updates.auto_memory !== undefined && updates.auto_memory !== null) {
+    parsed.auto_memory = updates.auto_memory;
   }
   const agent = parseAgentConfig(parsed);
   await writeFile(path, JSON.stringify(parsed, null, 2), "utf-8");

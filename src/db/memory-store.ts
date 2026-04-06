@@ -95,6 +95,7 @@ export class MemoryStore {
     this.migrateAgentsScheduleEnabled();
     this.migrateConversationsGraphId();
     this.migrateAgentsScheduleReportTargets();
+    this.migrateAgentsAutoMemory();
   }
 
   private migrateMemoriesEmbedding(): void {
@@ -124,6 +125,14 @@ export class MemoryStore {
   private migrateAgentsScheduleReportTargets(): void {
     try {
       this.db.exec("ALTER TABLE agents ADD COLUMN schedule_report_targets TEXT");
+    } catch {
+      // Column already exists
+    }
+  }
+
+  private migrateAgentsAutoMemory(): void {
+    try {
+      this.db.exec("ALTER TABLE agents ADD COLUMN auto_memory INTEGER NOT NULL DEFAULT 0");
     } catch {
       // Column already exists
     }
@@ -370,6 +379,7 @@ export class MemoryStore {
       avatar: row.avatar ?? undefined,
       user_created: Number(row.user_created) === 1,
       limits: row.limits ? JSON.parse(String(row.limits)) : undefined,
+      auto_memory: Number(row.auto_memory) === 1 ? true : undefined,
     };
   }
 
@@ -403,11 +413,12 @@ export class MemoryStore {
     const avatar = config.avatar != null ? String(config.avatar) : null;
     const user_created = config.user_created === true ? 1 : 0;
     const limits = config.limits != null ? JSON.stringify(config.limits) : null;
+    const auto_memory = config.auto_memory === true ? 1 : 0;
     const stmt = this.db.prepare(
-      `INSERT INTO agents (id, name, model, description, personality, skills, tools, schedule, schedule_input, schedule_enabled, schedule_report_targets, avatar, user_created, limits)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO agents (id, name, model, description, personality, skills, tools, schedule, schedule_input, schedule_enabled, schedule_report_targets, avatar, user_created, limits, auto_memory)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
-    stmt.run(id, name, model, description, personality, skills, tools, schedule, schedule_input, schedule_enabled, schedule_report_targets, avatar, user_created, limits);
+    stmt.run(id, name, model, description, personality, skills, tools, schedule, schedule_input, schedule_enabled, schedule_report_targets, avatar, user_created, limits, auto_memory);
   }
 
   /** Update an existing agent. Only provided fields are updated. */
@@ -426,6 +437,7 @@ export class MemoryStore {
       avatar?: string | null;
       schedule_enabled?: boolean | null;
       schedule_report_targets?: Array<{ channel: string; address: string }> | null;
+      auto_memory?: boolean | null;
     }
   ): void {
     const agent = this.getAgentById(id);
@@ -448,10 +460,14 @@ export class MemoryStore {
       updates.schedule_report_targets !== undefined
         ? (updates.schedule_report_targets?.length ? JSON.stringify(updates.schedule_report_targets) : null)
         : (agent.schedule_report_targets != null ? (typeof agent.schedule_report_targets === "string" ? agent.schedule_report_targets : JSON.stringify(agent.schedule_report_targets)) : null);
+    const auto_memory =
+      updates.auto_memory !== undefined && updates.auto_memory !== null
+        ? (updates.auto_memory ? 1 : 0)
+        : (agent.auto_memory === true ? 1 : 0);
     const stmt = this.db.prepare(
-      "UPDATE agents SET name = ?, model = ?, description = ?, personality = ?, skills = ?, tools = ?, limits = ?, schedule = ?, schedule_input = ?, avatar = ?, schedule_enabled = ?, schedule_report_targets = ?, updated_at = datetime('now') WHERE id = ?"
+      "UPDATE agents SET name = ?, model = ?, description = ?, personality = ?, skills = ?, tools = ?, limits = ?, schedule = ?, schedule_input = ?, avatar = ?, schedule_enabled = ?, schedule_report_targets = ?, auto_memory = ?, updated_at = datetime('now') WHERE id = ?"
     );
-    stmt.run(name, model, description, personality, skills, tools, limits, schedule, schedule_input, avatar, schedule_enabled, schedule_report_targets, id);
+    stmt.run(name, model, description, personality, skills, tools, limits, schedule, schedule_input, avatar, schedule_enabled, schedule_report_targets, auto_memory, id);
   }
 
   /** Delete an agent by id. */

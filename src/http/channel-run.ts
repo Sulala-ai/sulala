@@ -7,6 +7,7 @@ import type { AgentOsConfig } from "../core/config.js";
 import { loadAgents } from "../core/agent-registry.js";
 import { runAgent } from "../core/runtime.js";
 import { getConversationHistoryForRun } from "./utils.js";
+import { extractAndSaveMemories } from "../core/memory-extractor.js";
 
 export type DefaultAgentConfigKey =
   | "telegram_default_agent_id"
@@ -58,6 +59,9 @@ async function runOneWithConversation(
     role: "assistant",
     contentJson: JSON.stringify({ text: output }),
   });
+  if (agent.auto_memory && result.output) {
+    void extractAndSaveMemories(memoryStore, agent.id, agent.model, userId, conversationHistory, task, result.output);
+  }
   await sendReply(output);
 }
 

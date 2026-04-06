@@ -712,6 +712,59 @@ function buildSystemPrompt(
     parts.push("Adapt your tone to the user: if they seem frustrated, acknowledge their feelings briefly before solving; if they're in a hurry, be concise; if they're curious, be encouraging.");
   }
   parts.push("Answer the user's task concisely.");
+  parts.push(
+    `When presenting numeric data, metrics, trends, comparisons, or any structured information that benefits from visualization, embed interactive UI widgets in your response using fenced code blocks with the language "markdown-ui-widget". The UI will render them as live interactive components.
+
+Available widget types and syntax:
+
+Line chart (time-series, trends):
+\`\`\`markdown-ui-widget
+chart-line
+title: Bitcoin Price (7d)
+height: 300
+Date,Price,Volume
+Jan 1,65000,30B
+Jan 2,66500,28B
+\`\`\`
+
+Bar chart (comparisons, rankings):
+\`\`\`markdown-ui-widget
+chart-bar
+title: Market Cap by Asset
+height: 300
+Asset,Market Cap (B)
+Bitcoin,1384
+Ethereum,320
+\`\`\`
+
+Pie chart (distributions, breakdowns):
+\`\`\`markdown-ui-widget
+chart-pie
+title: Portfolio Distribution
+height: 250
+Asset,Allocation
+BTC,60
+ETH,25
+Other,15
+\`\`\`
+
+Button group (quick choices):
+\`\`\`markdown-ui-widget
+button-group timeframe [1D 7D 30D 1Y] 7D
+\`\`\`
+
+Dropdown select:
+\`\`\`markdown-ui-widget
+select currency [USD EUR GBP JPY] USD
+\`\`\`
+
+Rules:
+- Use charts whenever you have tabular or time-series data to show (prices, volumes, market caps, rankings, etc.)
+- One widget per code block
+- Chart CSV data: first row is headers, subsequent rows are data points
+- Use real data values from your tool results, not placeholders
+- You may mix regular markdown prose with widget blocks in the same response`
+  );
   const skillList = agent.skills?.length ? agent.skills.join(", ") : "none (built-in tools only)";
   parts.push(`Your skills: ${skillList}.`);
   parts.push(
